@@ -254,7 +254,7 @@ function mulberry32(seed) {
 }
 
 /**
- * 從像素陣列自動產生螞蟻盒：每盒 min~max 格。
+ * 從像素陣列自動產生螞蟻盒：每盒 min~max 格（maxByColor 可以替個別顏色設定不同上限）。
  * 做法是模擬遊戲：每一輪重新計算可達格，挑一個「露出格數夠多」的顏色，
  * 盒子大小不超過目前露出的格數，然後照螞蟻的順序（近的先吃）把那些格子吃掉。
  *
@@ -264,7 +264,8 @@ function mulberry32(seed) {
  *
  * 回傳的陣列另外帶一個 solution 屬性：一種保證能過關的點選順序（佇列 index），測試用。
  */
-function generateBoxes(grid, { min = 10, max = 50, seed = 1, trapRate = 0.12, trapMax = 5 } = {}) {
+function generateBoxes(grid, { min = 10, max = 50, maxByColor = {}, seed = 1, trapRate = 0.12, trapMax = 5 } = {}) {
+  const maxOf = (k) => maxByColor[k] ?? max;
   const rand = mulberry32(seed);
   const { R, C, cells } = parseGrid(grid);
   const work = cells.slice();
@@ -310,9 +311,9 @@ function generateBoxes(grid, { min = 10, max = 50, seed = 1, trapRate = 0.12, tr
       const cands = Object.keys(free).filter((k) => free[k] >= min && exposedFree(k) * 2 < min);
       if (cands.length) {
         const color = cands[Math.floor(rand() * cands.length)];
-        let size = min + Math.floor(rand() * (Math.min(max, free[color]) - min + 1));
+        let size = min + Math.floor(rand() * (Math.min(maxOf(color), free[color]) - min + 1));
         const rest = free[color] - size;
-        if (rest > 0 && rest < min) size = free[color] <= max ? free[color] : free[color] - min;
+        if (rest > 0 && rest < min) size = free[color] <= maxOf(color) ? free[color] : free[color] - min;
         boxes.push({ color, count: size });
         pending.push(boxes.length - 1);
         free[color] -= size;
@@ -324,14 +325,14 @@ function generateBoxes(grid, { min = 10, max = 50, seed = 1, trapRate = 0.12, tr
     // 3. 一般盒：這個顏色現在最多能裝幾格（不超過露出的格數，也不留下不到一盒的零頭）
     const maxSize = (k) => {
       const avail = exposedFree(k), rem = free[k];
-      if (rem <= Math.min(max, avail)) return rem;
-      const size = Math.min(max, avail, rem - min);
+      if (rem <= Math.min(maxOf(k), avail)) return rem;
+      const size = Math.min(maxOf(k), avail, rem - min);
       return size >= min ? size : 0;
     };
     let options = Object.keys(byColor).map((k) => [k, maxSize(k)]).filter(([, m]) => m > 0);
     if (!options.length) { // 沒有顏色湊得滿一盒，只好出小盒
       options = Object.keys(byColor).map((k) => [k, exposedFree(k)]).filter(([, m]) => m > 0);
-      if (!options.length) return generateBoxes(grid, { min, max, seed: seed + 1000, trapRate, trapMax }); // 陷阱互相卡死，換一組
+      if (!options.length) return generateBoxes(grid, { min, max, maxByColor, seed: seed + 1000, trapRate, trapMax }); // 陷阱互相卡死，換一組
     }
     // 露出越多的顏色越容易被選到，盒子比較大
     let pick = rand() * options.reduce((t, [, m]) => t + m, 0), color, cap;
@@ -816,83 +817,73 @@ function createRenderer(canvas) {
 // =====================================================================
 // 5. 主程式：遊戲迴圈與輸入
 // =====================================================================
-// 由 boxesToLanes(generateBoxes(LEVEL_1.grid, { seed: 7 })) 產生（含陷阱盒，trapRate 0.12），每個陣列是一行
+// 產生關卡螞蟻盒的設定：天空（藍）與草地（綠）的盒子上限提高到 120，其餘顏色 50
+const LEVEL_1_GEN = { seed: 7, maxByColor: { S: 120, L: 120, G: 120, H: 120 } };
+// 由 boxesToLanes(generateBoxes(LEVEL_1.grid, LEVEL_1_GEN)) 產生（含陷阱盒），每個陣列是一行
 const LANES_LEVEL_1 = [
   [ // 第 1 行（由上往下）
-    { color: 'L', count: 20 }, { color: 'S', count: 44 }, { color: 'G', count: 50 }, { color: 'L', count: 45 },
-    { color: 'G', count: 32 }, { color: 'G', count: 50 }, { color: 'G', count: 45 }, { color: 'G', count: 32 },
-    { color: 'G', count: 49 }, { color: 'S', count: 48 }, { color: 'S', count: 44 }, { color: 'K', count: 13 },
-    { color: 'G', count: 43 }, { color: 'S', count: 29 }, { color: 'S', count: 39 }, { color: 'G', count: 48 },
-    { color: 'G', count: 36 }, { color: 'P', count: 12 }, { color: 'G', count: 49 }, { color: 'S', count: 42 },
-    { color: 'P', count: 22 }, { color: 'B', count: 15 }, { color: 'P', count: 20 }, { color: 'R', count: 21 },
-    { color: 'S', count: 42 }, { color: 'S', count: 39 }, { color: 'O', count: 31 }, { color: 'O', count: 20 },
-    { color: 'B', count: 26 }, { color: 'G', count: 10 }, { color: 'F', count: 17 }, { color: 'S', count: 32 },
-    { color: 'O', count: 15 }, { color: 'F', count: 15 }, { color: 'O', count: 12 }, { color: 'S', count: 22 },
-    { color: 'Y', count: 17 }, { color: 'K', count: 31 }, { color: 'W', count: 14 }, { color: 'B', count: 14 },
-    { color: 'K', count: 15 }, { color: 'F', count: 17 }, { color: 'W', count: 20 }, { color: 'Y', count: 35 },
-    { color: 'O', count: 19 }, { color: 'Y', count: 19 }, { color: 'O', count: 12 }, { color: 'F', count: 18 },
-    { color: 'O', count: 10 }, { color: 'F', count: 18 }, { color: 'F', count: 15 }, { color: 'K', count: 7 },
-    { color: 'S', count: 5 }, { color: 'Y', count: 1 }, { color: 'F', count: 13 },
+    { color: 'L', count: 20 }, { color: 'S', count: 102 }, { color: 'G', count: 120 }, { color: 'S', count: 107 },
+    { color: 'G', count: 71 }, { color: 'G', count: 99 }, { color: 'G', count: 80 }, { color: 'B', count: 16 },
+    { color: 'L', count: 17 }, { color: 'L', count: 16 }, { color: 'L', count: 26 }, { color: 'B', count: 15 },
+    { color: 'G', count: 37 }, { color: 'W', count: 23 }, { color: 'L', count: 23 }, { color: 'G', count: 40 },
+    { color: 'P', count: 31 }, { color: 'G', count: 40 }, { color: 'S', count: 44 }, { color: 'P', count: 21 },
+    { color: 'R', count: 18 }, { color: 'L', count: 17 }, { color: 'P', count: 18 }, { color: 'T', count: 17 },
+    { color: 'F', count: 11 }, { color: 'G', count: 13 }, { color: 'O', count: 14 }, { color: 'F', count: 19 },
+    { color: 'B', count: 12 }, { color: 'Y', count: 10 }, { color: 'F', count: 15 }, { color: 'B', count: 10 },
+    { color: 'F', count: 11 }, { color: 'L', count: 8 }, { color: 'Y', count: 5 }, { color: 'K', count: 5 },
   ],
   [ // 第 2 行（由上往下）
-    { color: 'G', count: 43 }, { color: 'S', count: 44 }, { color: 'S', count: 50 }, { color: 'S', count: 42 },
-    { color: 'H', count: 13 }, { color: 'G', count: 33 }, { color: 'G', count: 47 }, { color: 'G', count: 46 },
-    { color: 'G', count: 47 }, { color: 'G', count: 39 }, { color: 'G', count: 48 }, { color: 'L', count: 19 },
-    { color: 'K', count: 12 }, { color: 'S', count: 48 }, { color: 'G', count: 39 }, { color: 'G', count: 40 },
-    { color: 'P', count: 16 }, { color: 'S', count: 45 }, { color: 'L', count: 12 }, { color: 'G', count: 45 },
-    { color: 'G', count: 49 }, { color: 'S', count: 45 }, { color: 'G', count: 47 }, { color: 'S', count: 42 },
-    { color: 'F', count: 13 }, { color: 'G', count: 20 }, { color: 'B', count: 18 }, { color: 'S', count: 30 },
-    { color: 'Y', count: 14 }, { color: 'R', count: 12 }, { color: 'L', count: 22 }, { color: 'S', count: 50 },
-    { color: 'O', count: 43 }, { color: 'B', count: 28 }, { color: 'G', count: 10 }, { color: 'F', count: 12 },
-    { color: 'O', count: 43 }, { color: 'S', count: 20 }, { color: 'B', count: 16 }, { color: 'B', count: 19 },
-    { color: 'K', count: 19 }, { color: 'O', count: 34 }, { color: 'B', count: 26 }, { color: 'K', count: 15 },
-    { color: 'O', count: 30 }, { color: 'K', count: 19 }, { color: 'O', count: 27 }, { color: 'W', count: 29 },
-    { color: 'Y', count: 33 }, { color: 'O', count: 25 }, { color: 'F', count: 12 }, { color: 'Y', count: 14 },
-    { color: 'B', count: 33 }, { color: 'K', count: 12 }, { color: 'F', count: 13 }, { color: 'K', count: 11 },
-    { color: 'B', count: 11 }, { color: 'K', count: 4 }, { color: 'O', count: 10 }, { color: 'B', count: 8 },
-    { color: 'F', count: 5 },
+    { color: 'G', count: 100 }, { color: 'S', count: 94 }, { color: 'L', count: 23 }, { color: 'S', count: 92 },
+    { color: 'H', count: 13 }, { color: 'G', count: 59 }, { color: 'S', count: 110 }, { color: 'B', count: 17 },
+    { color: 'S', count: 111 }, { color: 'S', count: 91 }, { color: 'G', count: 82 }, { color: 'L', count: 16 },
+    { color: 'G', count: 58 }, { color: 'O', count: 48 }, { color: 'P', count: 20 }, { color: 'T', count: 47 },
+    { color: 'S', count: 44 }, { color: 'Y', count: 21 }, { color: 'W', count: 29 }, { color: 'S', count: 32 },
+    { color: 'K', count: 15 }, { color: 'O', count: 30 }, { color: 'P', count: 21 }, { color: 'B', count: 34 },
+    { color: 'O', count: 43 }, { color: 'W', count: 17 }, { color: 'Y', count: 27 }, { color: 'O', count: 27 },
+    { color: 'O', count: 19 }, { color: 'S', count: 14 }, { color: 'Y', count: 17 }, { color: 'K', count: 23 },
+    { color: 'O', count: 26 }, { color: 'B', count: 13 }, { color: 'O', count: 34 }, { color: 'K', count: 11 },
+    { color: 'Y', count: 13 }, { color: 'F', count: 19 }, { color: 'K', count: 12 }, { color: 'O', count: 12 },
+    { color: 'W', count: 12 }, { color: 'F', count: 3 }, { color: 'S', count: 10 }, { color: 'K', count: 14 },
+    { color: 'Y', count: 1 },
   ],
   [ // 第 3 行（由上往下）
-    { color: 'G', count: 46 }, { color: 'S', count: 30 }, { color: 'S', count: 42 }, { color: 'G', count: 26 },
-    { color: 'G', count: 39 }, { color: 'G', count: 39 }, { color: 'S', count: 43 }, { color: 'G', count: 23 },
-    { color: 'S', count: 50 }, { color: 'L', count: 15 }, { color: 'S', count: 22 }, { color: 'K', count: 10 },
-    { color: 'G', count: 38 }, { color: 'P', count: 15 }, { color: 'G', count: 32 }, { color: 'G', count: 16 },
-    { color: 'S', count: 32 }, { color: 'L', count: 36 }, { color: 'S', count: 38 }, { color: 'S', count: 27 },
-    { color: 'S', count: 22 }, { color: 'S', count: 43 }, { color: 'W', count: 23 }, { color: 'P', count: 19 },
-    { color: 'W', count: 12 }, { color: 'G', count: 16 }, { color: 'S', count: 49 }, { color: 'F', count: 10 },
-    { color: 'W', count: 11 }, { color: 'P', count: 23 }, { color: 'O', count: 25 }, { color: 'W', count: 16 },
-    { color: 'K', count: 18 }, { color: 'F', count: 16 }, { color: 'P', count: 20 }, { color: 'O', count: 39 },
-    { color: 'S', count: 36 }, { color: 'O', count: 16 }, { color: 'O', count: 45 }, { color: 'O', count: 26 },
-    { color: 'Y', count: 31 }, { color: 'S', count: 14 }, { color: 'W', count: 16 }, { color: 'Y', count: 32 },
-    { color: 'K', count: 19 }, { color: 'F', count: 14 }, { color: 'B', count: 11 }, { color: 'O', count: 27 },
-    { color: 'K', count: 11 }, { color: 'Y', count: 12 }, { color: 'T', count: 47 }, { color: 'B', count: 12 },
-    { color: 'F', count: 14 }, { color: 'F', count: 10 }, { color: 'S', count: 14 }, { color: 'O', count: 1 },
-    { color: 'W', count: 5 },
+    { color: 'G', count: 109 }, { color: 'L', count: 32 }, { color: 'S', count: 98 }, { color: 'G', count: 54 },
+    { color: 'G', count: 90 }, { color: 'K', count: 13 }, { color: 'S', count: 92 }, { color: 'S', count: 39 },
+    { color: 'S', count: 116 }, { color: 'S', count: 48 }, { color: 'S', count: 42 }, { color: 'K', count: 17 },
+    { color: 'G', count: 38 }, { color: 'W', count: 36 }, { color: 'K', count: 11 }, { color: 'W', count: 11 },
+    { color: 'G', count: 42 }, { color: 'O', count: 21 }, { color: 'R', count: 11 }, { color: 'B', count: 30 },
+    { color: 'O', count: 49 }, { color: 'F', count: 15 }, { color: 'W', count: 12 }, { color: 'O', count: 32 },
+    { color: 'H', count: 14 }, { color: 'O', count: 43 }, { color: 'O', count: 31 }, { color: 'Y', count: 22 },
+    { color: 'B', count: 26 }, { color: 'Y', count: 22 }, { color: 'W', count: 16 }, { color: 'K', count: 13 },
+    { color: 'B', count: 25 }, { color: 'Y', count: 20 },
   ],
   [ // 第 4 行（由上往下）
-    { color: 'S', count: 44 }, { color: 'G', count: 26 }, { color: 'G', count: 41 }, { color: 'G', count: 30 },
-    { color: 'L', count: 22 }, { color: 'G', count: 30 }, { color: 'G', count: 31 }, { color: 'S', count: 40 },
-    { color: 'S', count: 15 }, { color: 'H', count: 14 }, { color: 'G', count: 44 }, { color: 'L', count: 48 },
-    { color: 'T', count: 17 }, { color: 'G', count: 27 }, { color: 'G', count: 27 }, { color: 'S', count: 37 },
-    { color: 'S', count: 50 }, { color: 'B', count: 18 }, { color: 'W', count: 18 }, { color: 'S', count: 16 },
-    { color: 'O', count: 38 }, { color: 'O', count: 33 }, { color: 'W', count: 26 }, { color: 'B', count: 16 },
-    { color: 'W', count: 16 }, { color: 'O', count: 28 }, { color: 'O', count: 16 }, { color: 'B', count: 17 },
-    { color: 'K', count: 14 }, { color: 'R', count: 21 }, { color: 'O', count: 13 }, { color: 'B', count: 15 },
-    { color: 'W', count: 26 }, { color: 'B', count: 11 }, { color: 'W', count: 26 }, { color: 'W', count: 11 },
+    { color: 'S', count: 103 }, { color: 'G', count: 54 }, { color: 'G', count: 95 }, { color: 'G', count: 65 },
+    { color: 'G', count: 106 }, { color: 'G', count: 51 }, { color: 'H', count: 15 }, { color: 'L', count: 53 },
+    { color: 'L', count: 12 }, { color: 'G', count: 57 }, { color: 'G', count: 69 }, { color: 'S', count: 97 },
+    { color: 'G', count: 54 }, { color: 'F', count: 12 }, { color: 'S', count: 71 }, { color: 'P', count: 38 },
+    { color: 'L', count: 10 }, { color: 'O', count: 21 }, { color: 'S', count: 49 }, { color: 'G', count: 19 },
+    { color: 'B', count: 45 }, { color: 'B', count: 25 }, { color: 'F', count: 20 }, { color: 'O', count: 35 },
+    { color: 'K', count: 21 }, { color: 'O', count: 50 }, { color: 'G', count: 11 }, { color: 'K', count: 15 },
+    { color: 'S', count: 22 }, { color: 'O', count: 42 }, { color: 'O', count: 41 }, { color: 'S', count: 17 },
+    { color: 'F', count: 12 }, { color: 'B', count: 18 }, { color: 'B', count: 10 }, { color: 'F', count: 15 },
+    { color: 'D', count: 12 }, { color: 'B', count: 18 }, { color: 'W', count: 22 }, { color: 'F', count: 19 },
+    { color: 'W', count: 29 }, { color: 'W', count: 15 }, { color: 'W', count: 3 }, { color: 'P', count: 1 },
+    { color: 'Y', count: 9 }, { color: 'O', count: 11 },
   ],
   [ // 第 5 行（由上往下）
-    { color: 'B', count: 50 }, { color: 'G', count: 46 }, { color: 'G', count: 18 }, { color: 'G', count: 44 },
-    { color: 'S', count: 49 }, { color: 'G', count: 40 }, { color: 'S', count: 44 }, { color: 'G', count: 45 },
-    { color: 'S', count: 45 }, { color: 'S', count: 49 }, { color: 'W', count: 36 }, { color: 'S', count: 39 },
-    { color: 'G', count: 26 }, { color: 'S', count: 34 }, { color: 'W', count: 12 }, { color: 'W', count: 11 },
-    { color: 'B', count: 17 }, { color: 'H', count: 15 }, { color: 'B', count: 23 }, { color: 'O', count: 22 },
-    { color: 'S', count: 45 }, { color: 'O', count: 45 }, { color: 'Y', count: 16 }, { color: 'K', count: 16 },
-    { color: 'O', count: 38 }, { color: 'F', count: 12 }, { color: 'D', count: 23 }, { color: 'W', count: 26 },
-    { color: 'P', count: 19 }, { color: 'F', count: 17 }, { color: 'L', count: 48 }, { color: 'Y', count: 12 },
-    { color: 'B', count: 2 },
+    { color: 'B', count: 50 }, { color: 'S', count: 55 }, { color: 'B', count: 15 }, { color: 'F', count: 12 },
+    { color: 'S', count: 51 }, { color: 'F', count: 13 }, { color: 'G', count: 34 }, { color: 'R', count: 25 },
+    { color: 'W', count: 39 }, { color: 'S', count: 20 }, { color: 'W', count: 16 }, { color: 'D', count: 11 },
+    { color: 'W', count: 22 }, { color: 'F', count: 16 }, { color: 'K', count: 13 }, { color: 'K', count: 14 },
+    { color: 'F', count: 22 }, { color: 'O', count: 44 }, { color: 'L', count: 12 }, { color: 'Y', count: 23 },
+    { color: 'K', count: 33 }, { color: 'K', count: 16 }, { color: 'W', count: 25 }, { color: 'Y', count: 19 },
+    { color: 'O', count: 20 }, { color: 'Y', count: 25 }, { color: 'O', count: 32 }, { color: 'W', count: 27 },
+    { color: 'O', count: 18 }, { color: 'F', count: 16 }, { color: 'B', count: 17 }, { color: 'F', count: 11 },
+    { color: 'B', count: 10 }, { color: 'P', count: 16 }, { color: 'L', count: 2 }, { color: 'Y', count: 2 },
   ],
 ];
-LEVEL_1.lanes = LANES_LEVEL_1 || boxesToLanes(generateBoxes(LEVEL_1.grid, { seed: 7 }));
+LEVEL_1.lanes = LANES_LEVEL_1 || boxesToLanes(generateBoxes(LEVEL_1.grid, LEVEL_1_GEN));
 
 const canvas = document.getElementById('cv');
 const renderer = createRenderer(canvas);
