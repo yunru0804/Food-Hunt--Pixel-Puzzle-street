@@ -102,7 +102,7 @@
 // =====================================================================
 // 1. 關卡資料
 //    grid：二維陣列（每列一個字串，每個字元是一格的顏色代碼，'.' = 空白透明）
-//    boxes：螞蟻盒佇列，依序出現；數量總和必須等於各顏色格數
+//    lanes：螞蟻盒，分成 5 行（每行由上往下排隊，只能點最上面那盒）；數量總和必須等於各顏色格數
 // =====================================================================
 const LEVEL_1 = {
   name: '松鼠',
@@ -204,7 +204,7 @@ const LEVEL_1 = {
     'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
     'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHGGHGGGGGGGHGGGHGGGGGGGGGGGHGGGHGGGGGGGGGHGGGGGGGG',
   ],
-  boxes: null, // 由 generateBoxes() 產生後填入（見下方 BOXES_LEVEL_1）
+  lanes: null, // 由 generateBoxes() + boxesToLanes() 產生後填入（見下方 LANES_LEVEL_1）
 };
 
 // =====================================================================
@@ -235,7 +235,7 @@ function validateLevel(level) {
   level.grid.forEach((row, r) => { if (row.length !== C) errors.push(`第 ${r} 列長度 ${row.length} ≠ ${C}`); });
   const counts = countColors(parseGrid(level.grid).cells);
   const boxSum = {};
-  for (const b of level.boxes) {
+  for (const b of level.lanes.flat()) {
     if (!level.palette[b.color]) errors.push(`螞蟻盒顏色 ${b.color} 不在色盤中`);
     boxSum[b.color] = (boxSum[b.color] || 0) + b.count;
   }
@@ -347,12 +347,37 @@ function generateBoxes(grid, { min = 10, max = 50, seed = 1, trapRate = 0.12, tr
   return boxes;
 }
 
+/**
+ * 把 generateBoxes() 的盒子分成 laneCount 行。
+ * 依照「保證過關的點選順序」一盒一盒放：每盒放進某一行的最後面，所以輪到它的時候一定在那一行最上面。
+ * 一般盒子大約提前 laneCount-1 次點擊出現在最上面；陷阱盒則盡量在它排進佇列時就出現（很早就擺在上面誘惑玩家）。
+ * 回傳的陣列另外帶一個 solution 屬性：保證過關時每次要點哪一行，測試用。
+ */
+function boxesToLanes(boxes, laneCount = LANE_COUNT) {
+  const lanes = Array.from({ length: laneCount }, () => []);
+  const lastTap = new Array(laneCount).fill(-1); // 這一行上一盒被點走是第幾次點擊
+  const solution = [];
+  boxes.solution.forEach((p, t) => {
+    const appear = Math.min(p, t - (laneCount - 1)); // 希望它從第幾次點擊開始出現在最上面
+    let best = -1;
+    for (let l = 0; l < laneCount; l++)
+      if (lastTap[l] <= appear && (best < 0 || lastTap[l] > lastTap[best])) best = l;
+    if (best < 0) best = lastTap.indexOf(Math.min(...lastTap));
+    lanes[best].push({ color: boxes[p].color, count: boxes[p].count });
+    lastTap[best] = t;
+    solution.push(best);
+  });
+  lanes.solution = solution;
+  return lanes;
+}
+
 // =====================================================================
 // 3. 規則（純邏輯，不碰畫面）
 // =====================================================================
 const SLOT_COUNT = 5;        // 暫存格數量
 const HOLE_DY = 6;           // 螞蟻洞在版面下方幾格的位置（版面座標）
-const QUEUE_VISIBLE = 10;    // 佇列中可以點選的盒子數
+const LANE_COUNT = 5;        // 螞蟻盒分成幾行（每行只能點最上面那盒）
+const LANE_ROWS = 3;         // 每行畫出幾盒
 const ANT_SPEED = 36;        // 螞蟻速度（格/秒）
 const DISPATCH_GAP = 0.06;   // 同一隊每一波的間隔（秒）
 const ANTS_PER_WAVE = 3;     // 每一波同時派出幾隻
@@ -414,7 +439,7 @@ function createGame(level) {
     R, C, cells,
     palette: level.palette,
     left: cells.filter((v) => v !== EMPTY).length,
-    queue: level.boxes.map((b, id) => ({ id, color: b.color, count: b.count })),
+    lanes: level.lanes.map((lane) => lane.map((b) => ({ color: b.color, count: b.count }))),
     slots: new Array(SLOT_COUNT).fill(null),
     ants: [],
     reserved: new Set(),
@@ -463,12 +488,12 @@ function createGame(level) {
 
   const api = {
     state: s,
-    canTap(q) { return s.status === 'playing' && q < Math.min(QUEUE_VISIBLE, s.queue.length) && s.slots.includes(null); },
+    canTap(l) { return s.status === 'playing' && s.lanes[l]?.length > 0 && s.slots.includes(null); },
 
-    // 點螞蟻盒 → 進入暫存格
-    tapBox(q) {
-      if (!api.canTap(q)) return false;
-      const box = s.queue.splice(q, 1)[0];
+    // 點某一行最上面的螞蟻盒 → 進入暫存格，下面的盒子往上遞補
+    tapBox(l) {
+      if (!api.canTap(l)) return false;
+      const box = s.lanes[l].shift();
       const slot = s.slots.indexOf(null);
       s.slots[slot] = { ...box, total: box.count, dispatched: 0, eaten: 0, cooldown: 0, waiting: false };
       return true;
@@ -523,7 +548,7 @@ function createGame(level) {
       const teams = s.slots.filter(Boolean);
       const allStuck = teams.every((t) => findTarget(t.color) < 0);
       const full = teams.length === SLOT_COUNT;
-      const noMoreBoxes = s.queue.length === 0;
+      const noMoreBoxes = s.lanes.every((lane) => lane.length === 0);
       if (allStuck && (full || noMoreBoxes) && s.left > 0) s.status = 'lost';
     },
   };
@@ -551,7 +576,7 @@ function createRenderer(canvas) {
     const box = Math.floor(Math.min(60, (W - pad * 2 - gap * 4) / 5)); // 螞蟻盒邊長
     const depth = Math.round(box * 0.14);                     // 螞蟻盒的立體厚度
     const slot = Math.floor(box * 0.92);
-    const queueRows = Math.ceil(QUEUE_VISIBLE / 5);
+    const queueRows = LANE_ROWS;
     const queueH = queueRows * (box + depth + gap) + 18;
     const fixedBelow = 24 + slot + 20 + queueH;               // 洞口以下的高度
     // 80×80 格子很小，允許非整數格寬，繪製時再對齊像素
@@ -710,10 +735,25 @@ function createRenderer(canvas) {
     const left = (W - (SLOT_COUNT * L.slot + (SLOT_COUNT - 1) * L.gap)) / 2;
     return [left + k * (L.slot + L.gap), L.slotTop, L.slot, L.slot];
   }
-  function boxRect(q) {
-    const col = q % 5, row = Math.floor(q / 5);
-    const left = (W - (5 * L.box + 4 * L.gap)) / 2;
-    return [left + col * (L.box + L.gap), L.queueTop + row * (L.box + L.depth + L.gap), L.box, L.box + L.depth];
+  // 第 lane 行、第 row 盒（0 = 最上面）；shift = 往上遞補動畫還差多少像素
+  const rowH = () => L.box + L.depth + L.gap;
+  function boxRect(lane, row, shift = 0) {
+    const left = (W - (LANE_COUNT * L.box + (LANE_COUNT - 1) * L.gap)) / 2;
+    return [left + lane * (L.box + L.gap), L.queueTop + row * rowH() + shift, L.box, L.box + L.depth];
+  }
+
+  // 往上遞補的動畫：某一行變短時，整行先停在原位，再滑上來
+  const slide = new Array(LANE_COUNT).fill(0);
+  let laneLens = null, lanesRef = null, lastNow = 0;
+  function updateSlide(s, now) {
+    const dt = Math.min(0.05, (now - lastNow) / 1000);
+    lastNow = now;
+    if (lanesRef !== s.lanes) { lanesRef = s.lanes; laneLens = s.lanes.map((l) => l.length); slide.fill(0); }
+    s.lanes.forEach((lane, l) => {
+      if (lane.length < laneLens[l]) slide[l] += (laneLens[l] - lane.length) * rowH();
+      laneLens[l] = lane.length;
+      slide[l] = Math.max(0, slide[l] - Math.max(rowH() * 6, slide[l] * 12) * dt);
+    });
   }
 
   function draw(game) {
@@ -746,18 +786,26 @@ function createRenderer(canvas) {
       drawKey(x, y, w, h + L.depth, L.depth, s.palette[team.color], team.total - team.eaten);
     });
 
-    // 螞蟻盒佇列
-    for (let q = 0; q < Math.min(QUEUE_VISIBLE, s.queue.length); q++) {
-      const box = s.queue[q];
-      const [x, y, w, h] = boxRect(q);
-      drawKey(x, y, w, h, L.depth, s.palette[box.color], box.count);
-    }
+    // 螞蟻盒：每行最上面那盒可以點，下面的盒子往上遞補
+    updateSlide(s, now);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, L.queueTop - 4, W, LANE_ROWS * rowH() + 4); ctx.clip();
+    s.lanes.forEach((lane, l) => {
+      const extra = Math.ceil(slide[l] / rowH()); // 滑動中多畫幾盒，讓下面的盒子從底下滑進來
+      for (let row = 0; row < Math.min(lane.length, LANE_ROWS + extra); row++) {
+        const [x, y, w, h] = boxRect(l, row, slide[l]);
+        drawKey(x, y, w, h, L.depth, s.palette[lane[row].color], lane[row].count);
+      }
+    });
+    ctx.restore();
   }
 
+  // 點到哪一行最上面的盒子（回傳行號，沒點到回傳 -1）
   function hitQueue(x, y, game) {
-    for (let q = 0; q < Math.min(QUEUE_VISIBLE, game.state.queue.length); q++) {
-      const [bx, by, w, h] = boxRect(q);
-      if (x >= bx && x <= bx + w && y >= by && y <= by + h) return q;
+    for (let l = 0; l < LANE_COUNT; l++) {
+      if (!game.state.lanes[l].length) continue;
+      const [bx, by, w, h] = boxRect(l, 0);
+      if (x >= bx && x <= bx + w && y >= by && y <= by + h) return l;
     }
     return -1;
   }
@@ -768,71 +816,83 @@ function createRenderer(canvas) {
 // =====================================================================
 // 5. 主程式：遊戲迴圈與輸入
 // =====================================================================
-// 由 generateBoxes(LEVEL_1.grid, { seed: 7 }) 產生（含陷阱盒，trapRate 0.12）
-const BOXES_LEVEL_1 = [
-  { color: 'B', count: 50 }, { color: 'L', count: 20 }, { color: 'G', count: 43 }, { color: 'G', count: 46 },
-  { color: 'S', count: 44 }, { color: 'S', count: 44 }, { color: 'S', count: 44 }, { color: 'S', count: 30 },
-  { color: 'G', count: 26 }, { color: 'G', count: 50 }, { color: 'S', count: 50 }, { color: 'S', count: 42 },
-  { color: 'G', count: 41 }, { color: 'L', count: 45 }, { color: 'S', count: 42 }, { color: 'T', count: 47 },
-  { color: 'G', count: 26 }, { color: 'W', count: 36 }, { color: 'G', count: 30 }, { color: 'G', count: 32 },
-  { color: 'W', count: 23 }, { color: 'H', count: 13 }, { color: 'G', count: 39 }, { color: 'L', count: 22 },
-  { color: 'L', count: 48 }, { color: 'G', count: 50 }, { color: 'G', count: 33 }, { color: 'G', count: 39 },
-  { color: 'G', count: 30 }, { color: 'G', count: 45 }, { color: 'G', count: 47 }, { color: 'S', count: 43 },
-  { color: 'G', count: 31 }, { color: 'G', count: 32 }, { color: 'G', count: 46 }, { color: 'G', count: 23 },
-  { color: 'S', count: 40 }, { color: 'G', count: 49 }, { color: 'G', count: 47 }, { color: 'S', count: 50 },
-  { color: 'S', count: 15 }, { color: 'S', count: 48 }, { color: 'G', count: 39 }, { color: 'L', count: 15 },
-  { color: 'H', count: 14 }, { color: 'S', count: 44 }, { color: 'G', count: 48 }, { color: 'S', count: 22 },
-  { color: 'G', count: 44 }, { color: 'K', count: 13 }, { color: 'L', count: 19 }, { color: 'K', count: 10 },
-  { color: 'G', count: 43 }, { color: 'K', count: 12 }, { color: 'G', count: 38 }, { color: 'G', count: 46 },
-  { color: 'S', count: 29 }, { color: 'S', count: 48 }, { color: 'P', count: 15 }, { color: 'T', count: 17 },
-  { color: 'G', count: 18 }, { color: 'S', count: 39 }, { color: 'G', count: 39 }, { color: 'G', count: 32 },
-  { color: 'G', count: 44 }, { color: 'G', count: 48 }, { color: 'G', count: 40 }, { color: 'G', count: 16 },
-  { color: 'S', count: 49 }, { color: 'G', count: 36 }, { color: 'P', count: 16 }, { color: 'S', count: 32 },
-  { color: 'G', count: 40 }, { color: 'P', count: 12 }, { color: 'S', count: 45 }, { color: 'L', count: 36 },
-  { color: 'S', count: 44 }, { color: 'G', count: 49 }, { color: 'L', count: 12 }, { color: 'S', count: 38 },
-  { color: 'G', count: 45 }, { color: 'S', count: 42 }, { color: 'G', count: 45 }, { color: 'S', count: 27 },
-  { color: 'S', count: 45 }, { color: 'P', count: 22 }, { color: 'G', count: 49 }, { color: 'S', count: 22 },
-  { color: 'S', count: 49 }, { color: 'B', count: 15 }, { color: 'S', count: 45 }, { color: 'S', count: 43 },
-  { color: 'L', count: 48 }, { color: 'P', count: 20 }, { color: 'G', count: 47 }, { color: 'D', count: 23 },
-  { color: 'S', count: 42 }, { color: 'R', count: 21 }, { color: 'S', count: 39 }, { color: 'P', count: 19 },
-  { color: 'G', count: 27 }, { color: 'F', count: 13 }, { color: 'G', count: 26 }, { color: 'W', count: 12 },
-  { color: 'G', count: 27 }, { color: 'G', count: 20 }, { color: 'S', count: 34 }, { color: 'G', count: 16 },
-  { color: 'S', count: 37 }, { color: 'B', count: 18 }, { color: 'W', count: 12 }, { color: 'S', count: 49 },
-  { color: 'S', count: 50 }, { color: 'S', count: 30 }, { color: 'W', count: 11 }, { color: 'R', count: 12 },
-  { color: 'F', count: 10 }, { color: 'B', count: 18 }, { color: 'Y', count: 14 }, { color: 'B', count: 17 },
-  { color: 'W', count: 11 }, { color: 'H', count: 15 }, { color: 'P', count: 23 }, { color: 'S', count: 42 },
-  { color: 'L', count: 22 }, { color: 'B', count: 23 }, { color: 'O', count: 25 }, { color: 'S', count: 39 },
-  { color: 'R', count: 21 }, { color: 'S', count: 50 }, { color: 'O', count: 22 }, { color: 'W', count: 16 },
-  { color: 'O', count: 31 }, { color: 'O', count: 43 }, { color: 'S', count: 45 }, { color: 'K', count: 18 },
-  { color: 'O', count: 20 }, { color: 'W', count: 18 }, { color: 'B', count: 28 }, { color: 'O', count: 45 },
-  { color: 'F', count: 16 }, { color: 'B', count: 26 }, { color: 'G', count: 10 }, { color: 'Y', count: 16 },
-  { color: 'P', count: 20 }, { color: 'G', count: 10 }, { color: 'F', count: 12 }, { color: 'K', count: 16 },
-  { color: 'O', count: 39 }, { color: 'F', count: 17 }, { color: 'O', count: 43 }, { color: 'O', count: 38 },
-  { color: 'S', count: 36 }, { color: 'S', count: 32 }, { color: 'S', count: 20 }, { color: 'F', count: 12 },
-  { color: 'O', count: 16 }, { color: 'O', count: 15 }, { color: 'B', count: 16 }, { color: 'O', count: 45 },
-  { color: 'F', count: 15 }, { color: 'B', count: 19 }, { color: 'S', count: 16 }, { color: 'O', count: 26 },
-  { color: 'O', count: 12 }, { color: 'K', count: 19 }, { color: 'O', count: 38 }, { color: 'Y', count: 31 },
-  { color: 'S', count: 22 }, { color: 'O', count: 34 }, { color: 'O', count: 33 }, { color: 'S', count: 14 },
-  { color: 'Y', count: 17 }, { color: 'B', count: 26 }, { color: 'W', count: 26 }, { color: 'W', count: 16 },
-  { color: 'K', count: 31 }, { color: 'K', count: 15 }, { color: 'B', count: 16 }, { color: 'Y', count: 32 },
-  { color: 'W', count: 14 }, { color: 'O', count: 30 }, { color: 'W', count: 16 }, { color: 'K', count: 19 },
-  { color: 'B', count: 14 }, { color: 'K', count: 19 }, { color: 'O', count: 28 }, { color: 'F', count: 14 },
-  { color: 'K', count: 15 }, { color: 'O', count: 27 }, { color: 'O', count: 16 }, { color: 'B', count: 11 },
-  { color: 'F', count: 17 }, { color: 'W', count: 29 }, { color: 'B', count: 17 }, { color: 'O', count: 27 },
-  { color: 'W', count: 20 }, { color: 'Y', count: 33 }, { color: 'K', count: 14 }, { color: 'K', count: 11 },
-  { color: 'Y', count: 35 }, { color: 'O', count: 25 }, { color: 'Y', count: 12 }, { color: 'O', count: 19 },
-  { color: 'F', count: 12 }, { color: 'W', count: 26 }, { color: 'Y', count: 19 }, { color: 'Y', count: 14 },
-  { color: 'P', count: 19 }, { color: 'O', count: 13 }, { color: 'O', count: 12 }, { color: 'B', count: 33 },
-  { color: 'F', count: 17 }, { color: 'B', count: 15 }, { color: 'F', count: 18 }, { color: 'K', count: 12 },
-  { color: 'W', count: 26 }, { color: 'O', count: 10 }, { color: 'F', count: 13 }, { color: 'B', count: 12 },
-  { color: 'B', count: 11 }, { color: 'F', count: 18 }, { color: 'K', count: 11 }, { color: 'F', count: 14 },
-  { color: 'W', count: 26 }, { color: 'F', count: 15 }, { color: 'B', count: 11 }, { color: 'F', count: 10 },
-  { color: 'W', count: 11 }, { color: 'K', count: 7 }, { color: 'K', count: 4 }, { color: 'S', count: 14 },
-  { color: 'S', count: 5 }, { color: 'O', count: 10 }, { color: 'O', count: 1 }, { color: 'Y', count: 12 },
-  { color: 'Y', count: 1 }, { color: 'B', count: 8 }, { color: 'W', count: 5 }, { color: 'B', count: 2 },
-  { color: 'F', count: 13 }, { color: 'F', count: 5 },
+// 由 boxesToLanes(generateBoxes(LEVEL_1.grid, { seed: 7 })) 產生（含陷阱盒，trapRate 0.12），每個陣列是一行
+const LANES_LEVEL_1 = [
+  [ // 第 1 行（由上往下）
+    { color: 'L', count: 20 }, { color: 'S', count: 44 }, { color: 'G', count: 50 }, { color: 'L', count: 45 },
+    { color: 'G', count: 32 }, { color: 'G', count: 50 }, { color: 'G', count: 45 }, { color: 'G', count: 32 },
+    { color: 'G', count: 49 }, { color: 'S', count: 48 }, { color: 'S', count: 44 }, { color: 'K', count: 13 },
+    { color: 'G', count: 43 }, { color: 'S', count: 29 }, { color: 'S', count: 39 }, { color: 'G', count: 48 },
+    { color: 'G', count: 36 }, { color: 'P', count: 12 }, { color: 'G', count: 49 }, { color: 'S', count: 42 },
+    { color: 'P', count: 22 }, { color: 'B', count: 15 }, { color: 'P', count: 20 }, { color: 'R', count: 21 },
+    { color: 'S', count: 42 }, { color: 'S', count: 39 }, { color: 'O', count: 31 }, { color: 'O', count: 20 },
+    { color: 'B', count: 26 }, { color: 'G', count: 10 }, { color: 'F', count: 17 }, { color: 'S', count: 32 },
+    { color: 'O', count: 15 }, { color: 'F', count: 15 }, { color: 'O', count: 12 }, { color: 'S', count: 22 },
+    { color: 'Y', count: 17 }, { color: 'K', count: 31 }, { color: 'W', count: 14 }, { color: 'B', count: 14 },
+    { color: 'K', count: 15 }, { color: 'F', count: 17 }, { color: 'W', count: 20 }, { color: 'Y', count: 35 },
+    { color: 'O', count: 19 }, { color: 'Y', count: 19 }, { color: 'O', count: 12 }, { color: 'F', count: 18 },
+    { color: 'O', count: 10 }, { color: 'F', count: 18 }, { color: 'F', count: 15 }, { color: 'K', count: 7 },
+    { color: 'S', count: 5 }, { color: 'Y', count: 1 }, { color: 'F', count: 13 },
+  ],
+  [ // 第 2 行（由上往下）
+    { color: 'G', count: 43 }, { color: 'S', count: 44 }, { color: 'S', count: 50 }, { color: 'S', count: 42 },
+    { color: 'H', count: 13 }, { color: 'G', count: 33 }, { color: 'G', count: 47 }, { color: 'G', count: 46 },
+    { color: 'G', count: 47 }, { color: 'G', count: 39 }, { color: 'G', count: 48 }, { color: 'L', count: 19 },
+    { color: 'K', count: 12 }, { color: 'S', count: 48 }, { color: 'G', count: 39 }, { color: 'G', count: 40 },
+    { color: 'P', count: 16 }, { color: 'S', count: 45 }, { color: 'L', count: 12 }, { color: 'G', count: 45 },
+    { color: 'G', count: 49 }, { color: 'S', count: 45 }, { color: 'G', count: 47 }, { color: 'S', count: 42 },
+    { color: 'F', count: 13 }, { color: 'G', count: 20 }, { color: 'B', count: 18 }, { color: 'S', count: 30 },
+    { color: 'Y', count: 14 }, { color: 'R', count: 12 }, { color: 'L', count: 22 }, { color: 'S', count: 50 },
+    { color: 'O', count: 43 }, { color: 'B', count: 28 }, { color: 'G', count: 10 }, { color: 'F', count: 12 },
+    { color: 'O', count: 43 }, { color: 'S', count: 20 }, { color: 'B', count: 16 }, { color: 'B', count: 19 },
+    { color: 'K', count: 19 }, { color: 'O', count: 34 }, { color: 'B', count: 26 }, { color: 'K', count: 15 },
+    { color: 'O', count: 30 }, { color: 'K', count: 19 }, { color: 'O', count: 27 }, { color: 'W', count: 29 },
+    { color: 'Y', count: 33 }, { color: 'O', count: 25 }, { color: 'F', count: 12 }, { color: 'Y', count: 14 },
+    { color: 'B', count: 33 }, { color: 'K', count: 12 }, { color: 'F', count: 13 }, { color: 'K', count: 11 },
+    { color: 'B', count: 11 }, { color: 'K', count: 4 }, { color: 'O', count: 10 }, { color: 'B', count: 8 },
+    { color: 'F', count: 5 },
+  ],
+  [ // 第 3 行（由上往下）
+    { color: 'G', count: 46 }, { color: 'S', count: 30 }, { color: 'S', count: 42 }, { color: 'G', count: 26 },
+    { color: 'G', count: 39 }, { color: 'G', count: 39 }, { color: 'S', count: 43 }, { color: 'G', count: 23 },
+    { color: 'S', count: 50 }, { color: 'L', count: 15 }, { color: 'S', count: 22 }, { color: 'K', count: 10 },
+    { color: 'G', count: 38 }, { color: 'P', count: 15 }, { color: 'G', count: 32 }, { color: 'G', count: 16 },
+    { color: 'S', count: 32 }, { color: 'L', count: 36 }, { color: 'S', count: 38 }, { color: 'S', count: 27 },
+    { color: 'S', count: 22 }, { color: 'S', count: 43 }, { color: 'W', count: 23 }, { color: 'P', count: 19 },
+    { color: 'W', count: 12 }, { color: 'G', count: 16 }, { color: 'S', count: 49 }, { color: 'F', count: 10 },
+    { color: 'W', count: 11 }, { color: 'P', count: 23 }, { color: 'O', count: 25 }, { color: 'W', count: 16 },
+    { color: 'K', count: 18 }, { color: 'F', count: 16 }, { color: 'P', count: 20 }, { color: 'O', count: 39 },
+    { color: 'S', count: 36 }, { color: 'O', count: 16 }, { color: 'O', count: 45 }, { color: 'O', count: 26 },
+    { color: 'Y', count: 31 }, { color: 'S', count: 14 }, { color: 'W', count: 16 }, { color: 'Y', count: 32 },
+    { color: 'K', count: 19 }, { color: 'F', count: 14 }, { color: 'B', count: 11 }, { color: 'O', count: 27 },
+    { color: 'K', count: 11 }, { color: 'Y', count: 12 }, { color: 'T', count: 47 }, { color: 'B', count: 12 },
+    { color: 'F', count: 14 }, { color: 'F', count: 10 }, { color: 'S', count: 14 }, { color: 'O', count: 1 },
+    { color: 'W', count: 5 },
+  ],
+  [ // 第 4 行（由上往下）
+    { color: 'S', count: 44 }, { color: 'G', count: 26 }, { color: 'G', count: 41 }, { color: 'G', count: 30 },
+    { color: 'L', count: 22 }, { color: 'G', count: 30 }, { color: 'G', count: 31 }, { color: 'S', count: 40 },
+    { color: 'S', count: 15 }, { color: 'H', count: 14 }, { color: 'G', count: 44 }, { color: 'L', count: 48 },
+    { color: 'T', count: 17 }, { color: 'G', count: 27 }, { color: 'G', count: 27 }, { color: 'S', count: 37 },
+    { color: 'S', count: 50 }, { color: 'B', count: 18 }, { color: 'W', count: 18 }, { color: 'S', count: 16 },
+    { color: 'O', count: 38 }, { color: 'O', count: 33 }, { color: 'W', count: 26 }, { color: 'B', count: 16 },
+    { color: 'W', count: 16 }, { color: 'O', count: 28 }, { color: 'O', count: 16 }, { color: 'B', count: 17 },
+    { color: 'K', count: 14 }, { color: 'R', count: 21 }, { color: 'O', count: 13 }, { color: 'B', count: 15 },
+    { color: 'W', count: 26 }, { color: 'B', count: 11 }, { color: 'W', count: 26 }, { color: 'W', count: 11 },
+  ],
+  [ // 第 5 行（由上往下）
+    { color: 'B', count: 50 }, { color: 'G', count: 46 }, { color: 'G', count: 18 }, { color: 'G', count: 44 },
+    { color: 'S', count: 49 }, { color: 'G', count: 40 }, { color: 'S', count: 44 }, { color: 'G', count: 45 },
+    { color: 'S', count: 45 }, { color: 'S', count: 49 }, { color: 'W', count: 36 }, { color: 'S', count: 39 },
+    { color: 'G', count: 26 }, { color: 'S', count: 34 }, { color: 'W', count: 12 }, { color: 'W', count: 11 },
+    { color: 'B', count: 17 }, { color: 'H', count: 15 }, { color: 'B', count: 23 }, { color: 'O', count: 22 },
+    { color: 'S', count: 45 }, { color: 'O', count: 45 }, { color: 'Y', count: 16 }, { color: 'K', count: 16 },
+    { color: 'O', count: 38 }, { color: 'F', count: 12 }, { color: 'D', count: 23 }, { color: 'W', count: 26 },
+    { color: 'P', count: 19 }, { color: 'F', count: 17 }, { color: 'L', count: 48 }, { color: 'Y', count: 12 },
+    { color: 'B', count: 2 },
+  ],
 ];
-LEVEL_1.boxes = BOXES_LEVEL_1 || generateBoxes(LEVEL_1.grid, { seed: 7 });
+LEVEL_1.lanes = LANES_LEVEL_1 || boxesToLanes(generateBoxes(LEVEL_1.grid, { seed: 7 }));
 
 const canvas = document.getElementById('cv');
 const renderer = createRenderer(canvas);
