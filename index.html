@@ -11,40 +11,90 @@
 <meta name="theme-color" content="#fffaf0">
 <title>Food Hunt: Pixel Puzzle</title>
 <style>
-  :root { --bg: #f5efe3; --ink: #3b2a1a; --line: #7a5530; --panel: #fffaf0; --accent: #ff6f3c; }
+  :root { --ink: #5a3416; --cream: #fff7ea; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
-  body { background: var(--bg); color: var(--ink); font-family: system-ui, 'PingFang TC', 'Noto Sans TC', sans-serif; overflow: hidden;
-         -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+  body {
+    color: var(--ink); font-family: system-ui, -apple-system, 'PingFang TC', 'Noto Sans TC', sans-serif; overflow: hidden;
+    background-color: #f6c48a;
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,.16) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.16) 75%),
+      linear-gradient(45deg, rgba(255,255,255,.16) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.16) 75%);
+    background-size: 44px 44px; background-position: 0 0, 22px 22px;
+    -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none;
+  }
   /* 100vh 是舊版 Safari 的備案；padding 避開瀏海與底部 Home 指示條 */
   #app { max-width: 480px; height: 100vh; height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
-  .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 2px solid var(--line); background: var(--panel); }
-  .bar b { font-size: 16px; }
-  .bar .info { flex: 1; font-size: 13px; color: #8a7458; }
-  button { touch-action: manipulation; }
-  .bar button { font: inherit; font-size: 14px; font-weight: 700; padding: 6px 12px; border: 2px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; }
-  .bar button.on { background: var(--accent); color: #fff; }
+  button { font: inherit; cursor: pointer; touch-action: manipulation; }
+  button:active { transform: translateY(3px); }
+
+  /* 上方列：重來｜Level｜2x */
+  .bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 10px 14px 4px; padding-top: max(10px, env(safe-area-inset-top)); }
+  .bar .title { font-size: 30px; font-weight: 900; letter-spacing: .5px; color: var(--ink); text-shadow: 0 2px 0 rgba(255,255,255,.55); }
+  .icon-btn {
+    justify-self: start; width: 46px; height: 46px; border-radius: 13px; border: 3px solid #6a32b8;
+    background: #9b5de5; color: #fff; font-size: 24px; font-weight: 900; line-height: 1; box-shadow: 0 4px 0 #6a32b8;
+  }
+  .speed-btn {
+    justify-self: end; height: 46px; padding: 0 12px; border-radius: 13px; border: 3px solid #8d8d9a;
+    background: #d9d9e1; color: #fff; font-size: 21px; font-weight: 900; letter-spacing: -1px;
+    -webkit-text-stroke: 1px #6f6f7c; box-shadow: 0 4px 0 #8d8d9a;
+  }
+  .speed-btn.on { background: #ffb02e; border-color: #d9822b; -webkit-text-stroke-color: #a85a10; box-shadow: 0 4px 0 #d9822b; }
+  .icon-btn:active, .speed-btn:active { box-shadow: 0 1px 0 #6a32b8; }
+
   canvas { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; padding: 16px; }
+
+  /* 開始畫面 */
+  .start {
+    position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+    background: inherit;
+  }
+  .start.hidden { display: none; }
+  .logo { font-size: 48px; font-weight: 900; color: #fff; -webkit-text-stroke: 2px var(--ink); text-shadow: 0 4px 0 var(--ink); line-height: 1; }
+  .sub { font-size: 16px; font-weight: 800; margin-top: -6px; }
+  .preview-frame { background: #fbe8cc; padding: 12px; border-radius: 18px; box-shadow: 0 6px 0 #d9975a; }
+  #preview { width: min(64vw, 270px); aspect-ratio: 1; image-rendering: pixelated; display: block; border-radius: 4px; }
+  .start-btn {
+    margin-top: 8px; padding: 14px 58px; border-radius: 18px; border: 4px solid #3f9a2c; background: #6fd34f;
+    color: #fff; font-size: 30px; font-weight: 900; letter-spacing: 2px; -webkit-text-stroke: 1.5px #2f7a1f; box-shadow: 0 6px 0 #3f9a2c;
+  }
+  .start-btn:active { box-shadow: 0 2px 0 #3f9a2c; }
+
+  /* 過關／失敗 */
+  .overlay { position: fixed; inset: 0; z-index: 6; background: rgba(60,30,10,.45); display: grid; place-items: center; padding: 16px; }
   .overlay.hidden { display: none; }
-  .card { background: var(--panel); border: 3px solid var(--line); border-radius: 10px; padding: 20px 24px; text-align: center; min-width: 240px; }
-  .card h2 { margin: 0 0 8px; }
-  .card p { margin: 0 0 14px; color: #8a7458; }
-  .card button { font: inherit; font-weight: 700; padding: 8px 18px; border: 2px solid var(--line); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+  .card { background: var(--cream); border-radius: 18px; box-shadow: 0 6px 0 #d9975a; padding: 22px 24px; text-align: center; min-width: 260px; }
+  .card h2 { margin: 0 0 8px; font-size: 26px; font-weight: 900; }
+  .card p { margin: 0 0 16px; color: #8a5a2e; }
+  .card-actions { display: flex; gap: 10px; justify-content: center; }
+  .card button { font-weight: 900; padding: 10px 18px; border-radius: 12px; border: 3px solid #3f9a2c; background: #6fd34f; color: #fff; box-shadow: 0 4px 0 #3f9a2c; }
+  .card button.ghost { border-color: #c98a55; background: #fbe8cc; color: var(--ink); box-shadow: 0 4px 0 #c98a55; }
 </style>
 </head>
 <body>
 <div id="app">
   <div class="bar">
-    <b>Food Hunt</b>
-    <span class="info" id="info"></span>
-    <button id="speedBtn">1x</button>
-    <button id="restartBtn">重來</button>
+    <button id="restartBtn" class="icon-btn" aria-label="重來">↻</button>
+    <div class="title">Level 999</div>
+    <button id="speedBtn" class="speed-btn" aria-label="2 倍速">▶▶2x</button>
   </div>
   <canvas id="cv"></canvas>
 </div>
+
+<div class="start" id="startScreen">
+  <div class="logo">Food Hunt</div>
+  <div class="sub">Pixel Puzzle・螞蟻搬方塊</div>
+  <div class="preview-frame"><canvas id="preview"></canvas></div>
+  <button class="start-btn" id="startBtn">START</button>
+</div>
+
 <div class="overlay hidden" id="overlay">
-  <div class="card"><h2 id="ovTitle"></h2><p id="ovText"></p><button id="ovBtn">再玩一次</button></div>
+  <div class="card">
+    <h2 id="ovTitle"></h2><p id="ovText"></p>
+    <div class="card-actions"><button class="ghost" id="ovHome">回首頁</button><button id="ovBtn">再玩一次</button></div>
+  </div>
 </div>
 
 <script>
@@ -301,6 +351,7 @@ function generateBoxes(grid, { min = 10, max = 50, seed = 1, trapRate = 0.12, tr
 // 3. 規則（純邏輯，不碰畫面）
 // =====================================================================
 const SLOT_COUNT = 5;        // 暫存格數量
+const HOLE_DY = 6;           // 螞蟻洞在版面下方幾格的位置（版面座標）
 const QUEUE_VISIBLE = 10;    // 佇列中可以點選的盒子數
 const ANT_SPEED = 36;        // 螞蟻速度（格/秒）
 const DISPATCH_GAP = 0.06;   // 同一隊每一波的間隔（秒）
@@ -371,7 +422,6 @@ function createGame(level) {
     dirty: true,
     status: 'playing', // playing | won | lost
     time: 0,
-    effects: [], // 給畫面用的事件：{ type: 'eat', i, color, t }
   };
 
   const ensureReach = () => {
@@ -391,14 +441,14 @@ function createGame(level) {
     return best;
   }
 
-  // 螞蟻路線（版面座標，單位 = 格）：暫存格 → 版面外緣 → 沿外圍 → 入口 → 空白格 → 目標
-  function antRoute(slot, target) {
+  // 螞蟻路線（版面座標，單位 = 格）：洞口 → 版面外緣 → 沿外圍 → 入口 → 空白格 → 目標；回程原路返回
+  function antRoute(target) {
     const reach = ensureReach();
     const cellsOnPath = Rules.cellPath(reach, target);
     const first = cellsOnPath[0];
     const fr = Math.floor(first / C), fc = first % C;
-    const sx = ((slot + 0.5) * C) / SLOT_COUNT;
-    const pts = [[sx, R + 1.2], [sx, R + 0.5]];
+    const sx = C / 2;
+    const pts = [[sx, R + HOLE_DY], [sx, R + 0.5]];
     const L = -0.5, Rt = C + 0.5, T = -0.5, Bt = R + 0.5;
     if (fr === R - 1) pts.push([fc + 0.5, Bt]);
     else if (fc === 0) pts.push([L, Bt], [L, fr + 0.5]);
@@ -439,7 +489,7 @@ function createGame(level) {
           const target = findTarget(team.color);
           if (target < 0) break;
           s.reserved.add(target);
-          s.ants.push({ team, slot: k, target, route: antRoute(k, target), d: 0 });
+          s.ants.push({ team, slot: k, target, color: team.color, route: antRoute(target), d: 0, picked: false });
           team.dispatched++;
           sent++;
         }
@@ -447,20 +497,21 @@ function createGame(level) {
         if (sent > 0) team.cooldown = DISPATCH_GAP;
       });
 
-      // 螞蟻前進、抵達就吃掉
+      // 螞蟻前進：走到目標就把方塊搬起來（方塊離開版面），再原路搬回洞裡
       for (let a = s.ants.length - 1; a >= 0; a--) {
         const ant = s.ants[a];
         ant.d += ANT_SPEED * dt;
-        if (ant.d < ant.route.length) continue;
-        s.effects.push({ type: 'eat', i: ant.target, color: s.cells[ant.target], t: s.time });
-        s.cells[ant.target] = EMPTY;
-        s.reserved.delete(ant.target);
-        s.left--;
-        s.dirty = true;
-        s.ants.splice(a, 1);
-        const team = ant.team;
-        team.eaten++;
-        if (team.eaten === team.total) s.slots[ant.slot] = null; // 吃完離開
+        if (!ant.picked && ant.d >= ant.route.length) {
+          ant.picked = true;
+          s.cells[ant.target] = EMPTY;
+          s.reserved.delete(ant.target);
+          s.left--;
+          s.dirty = true;
+          const team = ant.team;
+          team.eaten++;
+          if (team.eaten === team.total) s.slots[ant.slot] = null; // 全部搬完，隊伍離開
+        }
+        if (ant.d >= ant.route.length * 2) s.ants.splice(a, 1); // 回到洞裡
       }
 
       api.updateStatus();
@@ -468,7 +519,7 @@ function createGame(level) {
 
     updateStatus() {
       if (s.left === 0 && s.ants.length === 0) { s.status = 'won'; return; }
-      if (s.ants.length > 0) return;
+      if (s.ants.some((a) => !a.picked)) return; // 還有螞蟻在去搬的路上
       const teams = s.slots.filter(Boolean);
       const allStuck = teams.every((t) => findTarget(t.color) < 0);
       const full = teams.length === SLOT_COUNT;
@@ -485,7 +536,7 @@ function createGame(level) {
 function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, L = null;
-  // 版面先畫在離屏圖層，之後只重畫被吃掉的格子（80×80 每幀全畫太慢）
+  // 版面先畫在離屏圖層，之後只重畫被搬走的格子（80×80 每幀全畫太慢）
   const layer = document.createElement('canvas');
   const lctx = layer.getContext('2d');
   let shown = null; // 圖層上目前畫的格子內容，用來跟 state.cells 比對
@@ -496,22 +547,28 @@ function createRenderer(canvas) {
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const { R, C } = game.state;
-    const pad = 12, gap = 8;
-    const box = Math.floor(Math.min(64, (W - pad * 2 - gap * 4) / 5)); // 正方形螞蟻盒邊長
+    const pad = 14, fp = 10, gap = 8;                         // fp = 版面外框寬度
+    const box = Math.floor(Math.min(60, (W - pad * 2 - gap * 4) / 5)); // 螞蟻盒邊長
+    const depth = Math.round(box * 0.14);                     // 螞蟻盒的立體厚度
+    const slot = Math.floor(box * 0.92);
     const queueRows = Math.ceil(QUEUE_VISIBLE / 5);
-    const below = 14 + box + 20 + queueRows * (box + gap) + 24;
+    const queueH = queueRows * (box + depth + gap) + 18;
+    const fixedBelow = 24 + slot + 20 + queueH;               // 洞口以下的高度
     // 80×80 格子很小，允許非整數格寬，繪製時再對齊像素
-    const cell = Math.max(3, Math.min((W - pad * 2) / (C + 1), (H - pad * 2 - below) / (R + 1)));
-    const bx = (W - cell * C) / 2, by = pad + cell * 0.5;
-    const slotTop = by + cell * R + 14;
-    const queueTop = slotTop + box + 20;
-    L = { cell, bx, by, slotTop, queueTop, box, gap };
+    const cell = Math.max(2, Math.min((W - pad * 2 - fp * 2) / C, (H - pad - fp - fixedBelow) / (R + HOLE_DY)));
+    const contentH = fp + cell * (R + HOLE_DY) + fixedBelow;
+    const by = pad + fp + Math.max(0, (H - pad - contentH) / 3); // 螢幕較高時整體稍微往下移
+    const bx = (W - cell * C) / 2;
+    const holeY = by + cell * (R + HOLE_DY);
+    const slotTop = holeY + 24;
+    const queueTop = slotTop + slot + 20;
+    L = { cell, bx, by, fp, box, depth, slot, gap, holeX: bx + (cell * C) / 2, holeY, slotTop, queueTop };
     layer.width = canvas.width; layer.height = canvas.height;
     lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     shown = null;
   }
 
-  // ---- 立體方塊：左上亮邊、右下暗邊、中間正面 ----
+  // ---- 顏色工具 ----
   const shadeCache = {};
   const mix = (hex, to, k) => {
     const a = parseInt(hex.slice(1), 16), b = parseInt(to.slice(1), 16);
@@ -520,6 +577,7 @@ function createRenderer(canvas) {
   };
   const shades = (hex) => (shadeCache[hex] ??= { hi: mix(hex, '#ffffff', 0.4), lo: mix(hex, '#000000', 0.32) });
 
+  // 立體方塊：左上亮邊、右下暗邊、中間正面
   function drawBlock(g, x, y, w, h, hex) {
     const { hi, lo } = shades(hex);
     const b = Math.max(1, Math.round(Math.min(w, h) * 0.16));
@@ -528,11 +586,15 @@ function createRenderer(canvas) {
     g.fillStyle = hex; g.fillRect(x + b, y + b, w - 2 * b, h - 2 * b);
   }
 
+  // 第 n 條格線的螢幕座標（四捨五入避免格子之間出現細縫）
+  const gx = (c) => Math.round(L.bx + c * L.cell);
+  const gy = (r) => Math.round(L.by + r * L.cell);
+
   function drawLayerCell(s, i) {
     const C = s.C, r = Math.floor(i / C), c = i % C, v = s.cells[i];
     const x = gx(c), y = gy(r), w = gx(c + 1) - x, h = gy(r + 1) - y;
     if (v === EMPTY) {
-      lctx.fillStyle = (r + c) % 2 ? '#ede4d3' : '#e6dcc8';
+      lctx.fillStyle = (r + c) % 2 ? '#f6e6cf' : '#f1dec4';
       lctx.fillRect(x, y, w, h);
     } else {
       drawBlock(lctx, x, y, w, h, s.palette[v]);
@@ -550,10 +612,6 @@ function createRenderer(canvas) {
       if (s.cells[i] !== shown[i]) { drawLayerCell(s, i); shown[i] = s.cells[i]; }
   }
 
-  // 第 n 條格線的螢幕座標（四捨五入避免格子之間出現細縫）
-  const gx = (c) => Math.round(L.bx + c * L.cell);
-  const gy = (r) => Math.round(L.by + r * L.cell);
-
   const roundRect = (x, y, w, h, r) => {
     ctx.beginPath();
     if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
@@ -561,91 +619,139 @@ function createRenderer(canvas) {
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   };
-  const textOn = (hex) => {
-    const n = parseInt(hex.slice(1), 16);
-    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.6 ? '#3b2a1a' : '#fff';
-  };
 
-  // 暫存格：正方形，置中在螞蟻出發的位置下方
-  function slotRect(k, C) {
-    const w = (C * L.cell) / SLOT_COUNT;
-    const size = Math.min(L.box, w - 6);
-    return [L.bx + (k + 0.5) * w - size / 2, L.slotTop, size, size];
+  // ---- 版面外框與螞蟻洞 ----
+  function drawFrame(s) {
+    const { bx, by, cell, fp } = L, w = cell * s.C + fp * 2, h = cell * s.R + fp * 2;
+    roundRect(bx - fp, by - fp + 5, w, h, 16); ctx.fillStyle = '#d9975a'; ctx.fill();
+    roundRect(bx - fp, by - fp, w, h, 16); ctx.fillStyle = '#fbe8cc'; ctx.fill();
+    ctx.strokeStyle = '#f0cfa2'; ctx.lineWidth = 2; ctx.stroke();
   }
-  // 螞蟻盒：正方形，每列 5 個置中排列
+
+  function drawHole() {
+    const { holeX: x, holeY: y } = L, rx = 32, ry = 12;
+    // 洞旁邊的蓋子
+    ctx.beginPath(); ctx.ellipse(x + rx * 1.15, y + 2, rx * 0.8, ry * 1.05, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#c98a55'; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + rx * 1.15, y, rx * 0.8, ry * 1.05, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#e2a874'; ctx.fill(); ctx.strokeStyle = '#c98a55'; ctx.lineWidth = 1.5; ctx.stroke();
+    // 洞口
+    const g = ctx.createRadialGradient(x, y + 2, 2, x, y, rx);
+    g.addColorStop(0, '#1f0f06'); g.addColorStop(0.75, '#3b200e'); g.addColorStop(1, '#7a4a25');
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  // ---- 螞蟻 ----
+  // 螞蟻在路線上的位置與朝向；超過路線長度就是回程（原路返回、頭朝洞口）
+  function antPose(ant) {
+    const { pts, seg, length } = ant.route;
+    let d = ant.d, back = false;
+    if (d > length) { d = Math.max(0, 2 * length - d); back = true; }
+    let k = 1;
+    while (k < seg.length - 1 && seg[k] < d) k++;
+    const t = Math.min(1, (d - seg[k - 1]) / (seg[k] - seg[k - 1] || 1));
+    const [x0, y0] = pts[k - 1], [x1, y1] = pts[k];
+    return { x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t, a: Math.atan2(y1 - y0, x1 - x0) + (back ? Math.PI : 0) };
+  }
+
+  function drawAnt(x, y, a, size, carry, phase, now) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a);
+    // 腳：三對，走路時前後擺動
+    const swing = Math.sin(now * 0.02 + phase) * size * 0.09;
+    ctx.strokeStyle = '#2b1a0e';
+    ctx.lineWidth = Math.max(0.8, size * 0.07);
+    ctx.beginPath();
+    [[0.1, 1], [0, -1], [-0.1, 1]].forEach(([lx, dir]) => {
+      const sw = swing * dir;
+      ctx.moveTo(lx * size, 0); ctx.lineTo(lx * size + sw + size * 0.04, -size * 0.3);
+      ctx.moveTo(lx * size, 0); ctx.lineTo(lx * size - sw + size * 0.04, size * 0.3);
+    });
+    ctx.stroke();
+    // 身體：腹部、胸部、頭
+    ctx.fillStyle = '#3a2414';
+    ctx.beginPath(); ctx.ellipse(-size * 0.27, 0, size * 0.22, size * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, size * 0.12, size * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(size * 0.21, 0, size * 0.11, size * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+    // 搬著的方塊（咬在頭前面）
+    if (carry) {
+      const b = Math.max(3, L.cell * 1.1);
+      drawBlock(ctx, size * 0.3, -b / 2, b, b, carry);
+    }
+    ctx.restore();
+  }
+
+  // ---- 暫存格與螞蟻盒 ----
+  // 立體按鍵：底下一層暗色當厚度，上面是正面，數字白字描邊
+  function drawKey(x, y, w, h, depth, hex, label) {
+    const { lo } = shades(hex), face = h - depth, r = Math.min(12, w * 0.2);
+    roundRect(x, y + depth, w, face, r); ctx.fillStyle = lo; ctx.fill();
+    roundRect(x, y, w, face, r); ctx.fillStyle = hex; ctx.fill();
+    roundRect(x + 4, y + 3, w - 8, face * 0.3, r * 0.6); ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill();
+    ctx.font = `900 ${Math.round(face * 0.44)}px system-ui, -apple-system, sans-serif`;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2.5, face * 0.1);
+    ctx.strokeStyle = lo;
+    ctx.strokeText(label, x + w / 2, y + face / 2 + 1);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, x + w / 2, y + face / 2 + 1);
+  }
+
+  function slotRect(k) {
+    const left = (W - (SLOT_COUNT * L.slot + (SLOT_COUNT - 1) * L.gap)) / 2;
+    return [left + k * (L.slot + L.gap), L.slotTop, L.slot, L.slot];
+  }
   function boxRect(q) {
     const col = q % 5, row = Math.floor(q / 5);
     const left = (W - (5 * L.box + 4 * L.gap)) / 2;
-    return [left + col * (L.box + L.gap), L.queueTop + row * (L.box + L.gap), L.box, L.box];
+    return [left + col * (L.box + L.gap), L.queueTop + row * (L.box + L.depth + L.gap), L.box, L.box + L.depth];
   }
 
   function draw(game) {
-    const s = game.state, { R, C } = s, { cell, bx, by } = L;
+    const s = game.state, { cell, bx, by } = L;
+    const now = performance.now();
     ctx.clearRect(0, 0, W, H);
 
-    // 版面（空白格以淡色棋盤格表示）
+    drawFrame(s);
     syncLayer(s);
     ctx.drawImage(layer, 0, 0, W, H);
-
-    // 被吃掉的縮小效果
-    const EAT_T = 0.3;
-    s.effects = s.effects.filter((e) => s.time - e.t < EAT_T);
-    for (const e of s.effects) {
-      const k = 1 - (s.time - e.t) / EAT_T, sz = Math.max(1, cell * k);
-      drawBlock(ctx, bx + (e.i % C) * cell + (cell - sz) / 2, by + Math.floor(e.i / C) * cell + (cell - sz) / 2, sz, sz, s.palette[e.color]);
-    }
+    drawHole();
 
     // 螞蟻
-    const rad = Math.max(2.5, cell * 0.32);
+    const antSize = Math.max(12, cell * 2.2);
     for (const ant of s.ants) {
-      const { pts, seg } = ant.route;
-      let k = 1;
-      while (k < seg.length - 1 && seg[k] < ant.d) k++;
-      const t = Math.min(1, (ant.d - seg[k - 1]) / (seg[k] - seg[k - 1] || 1));
-      const x = pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t;
-      const y = pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t;
-      ctx.beginPath();
-      ctx.arc(bx + x * cell, by + y * cell, rad, 0, Math.PI * 2);
-      ctx.fillStyle = s.palette[ant.team.color];
-      ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = '#2b1a0e'; ctx.stroke();
+      const p = antPose(ant);
+      drawAnt(bx + p.x * cell, by + p.y * cell, p.a, antSize, ant.picked ? s.palette[ant.color] : null, ant.target, now);
     }
 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
     // 暫存格
     s.slots.forEach((team, k) => {
-      const [x, y, w, h] = slotRect(k, C);
-      roundRect(x, y, w, h, 6);
+      const [x, y, w, h] = slotRect(k);
       if (!team) {
-        ctx.setLineDash([4, 4]); ctx.strokeStyle = '#a8916f'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+        roundRect(x, y + 4, w, h, 10); ctx.fillStyle = 'rgba(160,90,30,.25)'; ctx.fill();
+        roundRect(x, y, w, h, 10); ctx.fillStyle = '#fffdf8'; ctx.fill();
         return;
       }
-      ctx.fillStyle = s.palette[team.color]; ctx.fill();
-      ctx.strokeStyle = '#7a5530'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = textOn(s.palette[team.color]);
-      ctx.font = `bold ${Math.round(w * 0.32)}px system-ui`;
-      ctx.fillText(team.total - team.eaten, x + w / 2, y + h / 2);
+      drawKey(x, y, w, h + L.depth, L.depth, s.palette[team.color], team.total - team.eaten);
     });
 
     // 螞蟻盒佇列
     const canAny = s.slots.includes(null) && s.status === 'playing';
-    ctx.font = `bold ${Math.round(L.box * 0.32)}px system-ui`;
     for (let q = 0; q < Math.min(QUEUE_VISIBLE, s.queue.length); q++) {
       const box = s.queue[q];
       const [x, y, w, h] = boxRect(q);
-      ctx.globalAlpha = canAny ? 1 : 0.45;
-      roundRect(x, y, w, h, 6);
-      ctx.fillStyle = s.palette[box.color]; ctx.fill();
-      ctx.strokeStyle = '#7a5530'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = textOn(s.palette[box.color]);
-      ctx.fillText(box.count, x + w / 2, y + h / 2);
+      ctx.globalAlpha = canAny ? 1 : 0.5;
+      drawKey(x, y, w, h, L.depth, s.palette[box.color], box.count);
       ctx.globalAlpha = 1;
     }
     const more = s.queue.length - QUEUE_VISIBLE;
-    ctx.fillStyle = '#8a7458'; ctx.font = '13px system-ui';
+    ctx.fillStyle = '#8a5a2e'; ctx.font = '700 13px system-ui, -apple-system, sans-serif';
     const rows = Math.ceil(QUEUE_VISIBLE / 5);
-    ctx.fillText(s.queue.length === 0 ? '螞蟻盒已全部派出' : more > 0 ? `後面還有 ${more} 盒` : '', W / 2, L.queueTop + rows * (L.box + L.gap) + 8);
+    ctx.fillText(s.queue.length === 0 ? '螞蟻盒已全部派出' : more > 0 ? `後面還有 ${more} 盒` : '', W / 2, L.queueTop + rows * (L.box + L.depth + L.gap) + 6);
   }
 
   function hitQueue(x, y, game) {
@@ -733,25 +839,40 @@ const renderer = createRenderer(canvas);
 let game = null;
 let speed = 1;
 let shownStatus = 'playing';
+const $ = (id) => document.getElementById(id);
 
 function start() {
   const errors = validateLevel(LEVEL_1);
   if (errors.length) { showOverlay('關卡資料錯誤', errors.join('\n')); console.error(errors); return; }
   game = createGame(LEVEL_1);
   shownStatus = 'playing';
-  document.getElementById('overlay').classList.add('hidden');
+  $('overlay').classList.add('hidden');
+  $('startScreen').classList.add('hidden');
   renderer.resize(game);
 }
 
-function showOverlay(title, text) {
-  document.getElementById('ovTitle').textContent = title;
-  document.getElementById('ovText').textContent = text;
-  document.getElementById('overlay').classList.remove('hidden');
+function showStart() {
+  game = null;
+  $('overlay').classList.add('hidden');
+  $('startScreen').classList.remove('hidden');
 }
 
-function updateInfo() {
-  const s = game.state;
-  document.getElementById('info').textContent = `剩 ${s.left} 格・${s.queue.length} 盒`;
+// 開始畫面上的關卡預覽圖
+function drawPreview(level) {
+  const cv = $('preview'), { R, C, cells } = parseGrid(level.grid);
+  cv.width = C; cv.height = R;
+  const g = cv.getContext('2d');
+  cells.forEach((v, i) => {
+    if (v === EMPTY) return;
+    g.fillStyle = level.palette[v];
+    g.fillRect(i % C, Math.floor(i / C), 1, 1);
+  });
+}
+
+function showOverlay(title, text) {
+  $('ovTitle').textContent = title;
+  $('ovText').textContent = text;
+  $('overlay').classList.remove('hidden');
 }
 
 let last = performance.now();
@@ -761,35 +882,36 @@ function frame(now) {
   if (game) {
     game.step(dt * speed);
     renderer.draw(game);
-    updateInfo();
     const st = game.state.status;
     if (st !== shownStatus) {
       shownStatus = st;
       if (st === 'won') showOverlay('過關！🐜', `用時 ${game.state.time.toFixed(1)} 秒`);
-      if (st === 'lost') showOverlay('失敗', '暫存格滿了，而且沒有隊伍吃得到東西');
+      if (st === 'lost') showOverlay('失敗', '暫存格滿了，而且沒有隊伍搬得到方塊');
     }
   }
   requestAnimationFrame(frame);
 }
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (!game) return;
   const rect = canvas.getBoundingClientRect();
   const q = renderer.hitQueue(e.clientX - rect.left, e.clientY - rect.top, game);
   if (q >= 0) game.tapBox(q);
 });
-document.getElementById('speedBtn').onclick = (e) => {
+$('speedBtn').onclick = () => {
   speed = speed === 1 ? 2 : 1;
-  e.target.textContent = speed + 'x';
-  e.target.classList.toggle('on', speed === 2);
+  $('speedBtn').classList.toggle('on', speed === 2);
 };
-document.getElementById('restartBtn').onclick = start;
-document.getElementById('ovBtn').onclick = start;
+$('startBtn').onclick = start;
+$('restartBtn').onclick = start;
+$('ovBtn').onclick = start;
+$('ovHome').onclick = showStart;
 const onResize = () => game && renderer.resize(game);
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 300)); // iPhone 轉向後尺寸會晚一點才更新
 window.visualViewport?.addEventListener('resize', onResize); // Safari 網址列收合時
 
-start();
+drawPreview(LEVEL_1);
 requestAnimationFrame(frame);
 </script>
 </body>
