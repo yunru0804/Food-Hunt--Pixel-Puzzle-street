@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- iPhone「加入主畫面」後以全螢幕 App 方式開啟 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Food Hunt">
+<meta name="theme-color" content="#fffaf0">
+<title>Food Hunt: Pixel Puzzle</title>
+<style>
+  :root { --bg: #f5efe3; --ink: #3b2a1a; --line: #7a5530; --panel: #fffaf0; --accent: #ff6f3c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: system-ui, 'PingFang TC', 'Noto Sans TC', sans-serif; overflow: hidden;
+         -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+  /* 100vh 是舊版 Safari 的備案；padding 避開瀏海與底部 Home 指示條 */
+  #app { max-width: 480px; height: 100vh; height: 100dvh; margin: 0 auto; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 2px solid var(--line); background: var(--panel); }
+  .bar b { font-size: 16px; }
+  .bar .info { flex: 1; font-size: 13px; color: #8a7458; }
+  button { touch-action: manipulation; }
+  .bar button { font: inherit; font-size: 14px; font-weight: 700; padding: 6px 12px; border: 2px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); cursor: pointer; }
+  .bar button.on { background: var(--accent); color: #fff; }
+  canvas { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; padding: 16px; }
+  .overlay.hidden { display: none; }
+  .card { background: var(--panel); border: 3px solid var(--line); border-radius: 10px; padding: 20px 24px; text-align: center; min-width: 240px; }
+  .card h2 { margin: 0 0 8px; }
+  .card p { margin: 0 0 14px; color: #8a7458; }
+  .card button { font: inherit; font-weight: 700; padding: 8px 18px; border: 2px solid var(--line); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <b>Food Hunt</b>
+    <span class="info" id="info"></span>
+    <button id="speedBtn">1x</button>
+    <button id="restartBtn">重來</button>
+  </div>
+  <canvas id="cv"></canvas>
+</div>
+<div class="overlay hidden" id="overlay">
+  <div class="card"><h2 id="ovTitle"></h2><p id="ovText"></p><button id="ovBtn">再玩一次</button></div>
+</div>
+
+<script>
+// =====================================================================
+// 1. 關卡資料
+//    grid：二維陣列（每列一個字串，每個字元是一格的顏色代碼，'.' = 空白透明）
+//    boxes：螞蟻盒佇列，依序出現；數量總和必須等於各顏色格數
+// =====================================================================
+const LEVEL_1 = {
+  name: '松鼠',
+  source: 'picture/squirrel.jpg',
+  palette: {
+    O: '#e0782e', // 橘（尾巴、頭）
+    D: '#b3561f', // 深橘
+    F: '#e6a897', // 臉（粉紅）
+    W: '#fff4ef', // 白（眼睛周圍、牙齒、袖子）
+    K: '#2a1810', // 黑（眼睛線條、尾巴內側）
+    B: '#6b4334', // 咖啡（輪廓）
+    R: '#c0392b', // 紅（背心）
+    P: '#a8505a', // 酒紅（褲子）
+    Y: '#f7cf55', // 黃（玉米）
+    T: '#c99a5b', // 土黃
+    S: '#4f6f96', // 天空藍
+    L: '#9fb6d2', // 淺藍（天空的點點）
+    G: '#a9c08a', // 草綠
+    H: '#e2e9b4', // 淺綠（草地的點點）
+  },
+  grid: [
+    'SSSSSSSSSSSSSSSSLSSLSSSSSSSSSSSSSSSSSLSSLSSSSSSLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSLSSSSLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSLSLLSSSLSSSSSSSSSSSSSSSSSSSSSSSS',
+    'LSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSLSSLSSSSSSSSSSSSSSSSSSLS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS',
+    'SLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSSLS',
+    'LSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSSSSSSSSSLSSSSSSSSSSSLSSSSSSSSLSSSSLL',
+    'LSSSSSSSSSSSSSSLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSL',
+    'LSSLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSSSSSSSSSSSSSSS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSSSSSSLSSSSSSSSSSSSSLSSLLSSSSSSSSSSSSSSSSSSSS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSLSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSLSSSLSLS',
+    'SSLSSSLSSSLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSBBBBBBOBSSSSSSSSLSSSSSSSSSSSSSSSSSL',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLSSSSSSBBFOOOOOOOBBKSSSSSSLSSSLSSSSSSSSSSSLS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSBBBBLSBBOOOOOOOOOOOOOBBSSSSLSSSLSSSLSSSSLSSLS',
+    'SSLSSSSSSSSSSSSSSLSSSLSSSLSSSLSSSBBOOOOBBOOOOOOOOOOOOOOOOBBSSSSSSSSSSSSSLSSSSSLL',
+    'SSLSLSLSSLLLSSSSSSSSSSSSSSSSSSSSBBOOOOOBOOOOOOOOOOOOOOOOOOOBSSSLSSSLSSSSSSSSSSSL',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSBBOOOOOBOOOOOOOOOOOOOOOOOOOOOBSSSSSSSSSSSSLSSSSSS',
+    'SSSSSSSSSSSSSSSLSSSLSSSLSSSLSSSOOOOOOOBOOOOOOOOOOOOOOOOOOOOOBLSSSLSSSLSSSSLSSSLS',
+    'SSSSSSSSSSSSSSSSSSSSSSSSSSSLSBOOOOOOOOBOOOOOOOOOOOOOOOOOOOOOOBSSSSSSSSLLSLSSSSSS',
+    'SLLLSSLSSSLLSSSSSLSLLLSSSLSLBOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOBSLSSSSLSSSLSSLLSSS',
+    'SSLSLSSLSSSSSSSSSOOOOBSSSSSSOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOBSLSSSSSSSSSSSSSSS',
+    'SSSLSSSSSSSSLSSSSDOOOOBSLLSDOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOBSSLSSSLSSSSLSSSLS',
+    'LSLLSLLSLLSSLLSLLDOOOOOBSLBOOOOOOOOOOBOOOOOOOOOOOOOOOOOOOOOOOOOBSSSSSSSSSLSSSSLS',
+    'SSSSSSSSSSSSSSSSSDOOOOOBSSBOOOOOOOOODBBOWWOOOOOOOOOOOOOOOOOOOOOOBLSLSSSSLLSSLSLS',
+    'SSLLSSLSSLSLSLSSSDOKKKDOBBOOOOOOOOOOBOWWWWOOOOOOOOOOOOOOOOOOOOOOBBSSSSSSSSSSSSSS',
+    'SSSSSSLLSSLSSSSLSOOKKKKOOOOOOOOOOOOOKWWTYWWOOOOOOOOOOOOOOOOOOOOOOBBSSLLSSSLSSSLS',
+    'SLSSLLSLSSSSSLSLLOOKKKDDOOOOOOOOOOOOBWTTYTWOOOOOOOOOOOOOOOOOOOOOOOBBSSSSSSLLSSLS',
+    'SSLSSSSSSLSLSSLSSFOKBBBBDOOOOOOOODBBFWYYYTWOOOOOOOOOOOOOOOOOOOOOOOOBSSSSLLLSLSSL',
+    'SSLLSSSSSSSLSSSLSOOBWWWWBOOOOOOOOBWWWWWYYWWOOOOOOOOOOOOOOOOOOOOOOOBBSSSSLSSSLSSS',
+    'SSSSSSSSSSSSSSSSSSSBWWWWWBOOOOOODBWWWWWWWWBOOOOOOOOOOOOBBBBBBOOOOOBBSSSSSSSSSSSS',
+    'SLSSSLSSSLSSSLSLSSSWWKKKBBBOOOOOBBWWWWKKWWBOOOOOOOOOOBBKKKKKKKOOOOBBSSSSSSLSSSLS',
+    'SLSLSLSLSLSLSLSSSLBKKKWKKWBOOOOOBWWKKKWWKWBOOOOOOOOOBBKKKKKKKKOOOOBBSSLSLSLSLSLS',
+    'LSSSLSSSLSSSSSLSSSBBWWWWKWBDOOOOBWKKWWWWWWBOOOOOOOOOBKKKKKKKKKOOOOBBSLLSSLSSSLSS',
+    'GHSLSLSLSLSLSLSLSSWWWWWWWKWBOOOBWWKWWWWWWWWBBOOOOOOBBKKKKKKKKKDOOOBWSLLSLSLSLSLS',
+    'GGGGGGGGGGGGLLLSBBWWWWWWWWWBBOOBWKWWBBBBBWWBBBOOOOBBKKKKKKKKKKDOOOBBSSSLSSSLSSSS',
+    'GGGGGGGGGGGGGGSBBBBWWBBBBBWWBBBBWWWWWFFFFBBFFFBBOOBKKKKKKKKKKKOOOOBWSLLSLSLSLSLS',
+    'GGGGGGGGGGGGGBBBFFFBBFFFFBBBFBFFBBBWFFFFFFFFFFFBOOBKKKKKKKKKKFOOODWLSSSSSLSLSLSS',
+    'GGGGGGGGGGGGGBFFFFFFFFFFBBFBBFBFBWWBFFFFFFFFFFFBOOBKKKKKKKDOOOOOOBBLSSLSLSSSLSLS',
+    'GGGGGGGGGGGGGBFFFFFFFFFFFBFFBBBBBFFBFFFFFFFFFFFBOOBKKKKKKOOOOOOOOOWLSSSLSLSLSSSL',
+    'GGGGGGGGGGGGGBFFFFFFFFBBBBBFFFFFFFFBBBBBFFFFFFFBOOBOOOOOOOOOOOOOBBBLLSLSLSLSLSLS',
+    'GGGGGGGGGGGGGGBFFFFFFFFFFFBFFFFFFFFBFFFFFFFFFFFBOOYYYYYYYOOOOOOOBSSSLLSSSLSSSLSL',
+    'GGGGGGGGGGGGGGBFFFFFFFFFFBBBFFFBFFBBFFFFFFFFFFBBOYYYYYYYYOOOOOOBBLSSLSLSLSLSLSLS',
+    'GGGGGGGGGGGGGGBBFFFFFFFFFFBBBBBBBBBFFFFFFFFFFBBOYYYYYYYYYOBBBBBBGGLLSSSLSSSLSSSL',
+    'GGGGGGGGGGGGGGGBBBFFFFFFFFBBWWWWWWWWFFFFFFFFBBOOYYYYYYYYYBBGGGGGGGGGLSLSLSLSLSLS',
+    'GGGGGGGGGGGGGGGGBBFFFFFFFFFFWWWWWWWWFFFFFFFBFKKKKKKKKKKKKTTGGGGGGGGGGGGLSLSLSLSL',
+    'GGGGGGGGGGGGGGGGGGBBFFFFFFFFWWWWWWWFFFFBBBBBKKKKKKKKKKKKKYYGGGGGGGGGGGGGGSLSLSLS',
+    'GGGGGGGGGGGGGGGGGGGGBBBBFFFFFFFFFFBBBBBWFOBBKKKOYYYYYYYYKKYGGGGGGGGGGGGGGGGGGSSL',
+    'GGGGGGGGGGGGGGGGGGGGGGGGBBBFFFFFFFWWPRRWKKKTOOOOYYYYYYYYKKYGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGWWWWWWWRRRBBBBBBBWWRPRWKKWWWWWOYYYYYYYYKKYYTGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGWWWWWWWWRRRBBBBWWWWWPRRWKWWWWWWWYYYYYYYYKYYYTGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGWWWWWWWWWRRRBBBBBBBFWRRRWWWWWWWWWYYYYYYYYKYYYYGGGGGGGGGGGHGGGGGGG',
+    'GGGHGGGGGGGGGGGWWWWWWWWWRRRBBBBWWWFWWRRWWWWWWWWWYYYYYYYYKYYYYGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGWWWWWWWWWRWRWBBBBBBBWWRRWWWWWWWWWYYYYYYYKKYYYYGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGWWWWWWWWWRWRWWWBBBBBWWRFWWWWWWWWWYYYYYYYKKYYYYGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGWWWWWWWWWRRRRRRRRRRRRRRROOWWWWWWWYYYYYYYKTYYYYGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGWWWWWWWWWWWWWRRRRTTRWWBOOOOOWWWWKKKKKKKKKYYYYTGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGWWWWWFOOOOBWWRRRRTTBBOOOOOOOOWWKWYYYYYKYYYYKGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGWWWFOOOOOOOBWPPPTTTBOOOOOOOOOYYKYYYYYYKYYYYKWGGGGGGGGGGGGGGGGGGG',
+    'GGGGGHGGGGGGGGGGGWFOOOOOOOOBODPPPTTTBOOOOOOOOYYYKYYYYKTYYYKKGGGGGGGGGGGGGGGGGHGG',
+    'GGGGGGGGGGGGGGGGGGGBOOOOOOOBTTTDTTTTBBBBBBBBBTYYKYYYYKYYYYKTTGGGGGGGGGGGGGGGGGHG',
+    'GGGGGGGGGGGGGGGGGGGWBBOOOOOBFFTPTFFTTWWWWWWWYKKKKYYYKKYYYKBHYGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGGWWWBBBBBTTFFWTTFTWWWWWWWWYYTTKYYKKYYYYKHGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGBPWWPPPPPTTTTWPTDDPPPPPPWWYYYYKYYKYYYYKTYGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGBPWWPPPPPTTFTWPPPPPPPPPPPWTYYYKYYKYYYKBGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGWWWBPPPPPTTTTWPPPPPPPPPPPWFGYYKKKTYYYKTTGGGGGGGGGHGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGWWPPPPPPPPDDPWPPPPPPPPPPPPFGHYKKYYYYKKTGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGBPPPPPPPPPPPPWPPPPPPPPPPPPPGGGYKBBBKBHTGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGBPPPPPPPPPPPPBGFPPPPPPPPPPPGGGYTYYYYYGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGHGGGHGGGGGGGHBPPPPPPPPPPPPGGPPPPPPPPPPPPGHHYBBBBKBGGGGGGGGGGGGGGGGGGHGGGHGG',
+    'GGGGGGGGGGGGGGGGGGBBPPPPPPPPPBGGGGGGPPPPPPPPBBGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGBBBBBBBBBBKBKBBGGGGGGBKKKKKKBBKKBBBWGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGHGGGGGGGGBBBBBBKBKBBBKGGGGGGGGKKKKKKBBKKBBBBGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGGBBKBBBBBBKGGHGGGHGGGHGKKKKKKKKBKKGGGGGGGGGGGHGGGGGHGGGHGGGGGG',
+    'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGKKKKBBKGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'HGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GHGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHGGGHGGGHGGGHGGGHGGGGGGGHGGGHGGGGGHGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG',
+    'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHGGHGGGGGGGHGGGHGGGGGGGGGGGHGGGHGGGGGGGGGHGGGGGGGG',
+  ],
+  boxes: null, // 由 generateBoxes() 產生後填入（見下方 BOXES_LEVEL_1）
+};
+
+// =====================================================================
+// 2. 關卡工具：計數、驗證、自動產生螞蟻盒
+// =====================================================================
+const EMPTY = null;
+
+function parseGrid(grid) {
+  const R = grid.length, C = grid[0].length;
+  const cells = new Array(R * C);
+  for (let r = 0; r < R; r++)
+    for (let c = 0; c < C; c++) {
+      const ch = grid[r][c];
+      cells[r * C + c] = ch === '.' ? EMPTY : ch;
+    }
+  return { R, C, cells };
+}
+
+function countColors(cells) {
+  const counts = {};
+  for (const v of cells) if (v !== EMPTY) counts[v] = (counts[v] || 0) + 1;
+  return counts;
+}
+
+function validateLevel(level) {
+  const errors = [];
+  const { C } = parseGrid(level.grid);
+  level.grid.forEach((row, r) => { if (row.length !== C) errors.push(`第 ${r} 列長度 ${row.length} ≠ ${C}`); });
+  const counts = countColors(parseGrid(level.grid).cells);
+  const boxSum = {};
+  for (const b of level.boxes) {
+    if (!level.palette[b.color]) errors.push(`螞蟻盒顏色 ${b.color} 不在色盤中`);
+    boxSum[b.color] = (boxSum[b.color] || 0) + b.count;
+  }
+  for (const k of new Set([...Object.keys(counts), ...Object.keys(boxSum)]))
+    if ((counts[k] || 0) !== (boxSum[k] || 0)) errors.push(`顏色 ${k}：方格 ${counts[k] || 0} 格，螞蟻盒共 ${boxSum[k] || 0}`);
+  return errors;
+}
+
+function mulberry32(seed) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * 從像素陣列自動產生螞蟻盒：每盒 min~max 格。
+ * 做法是模擬遊戲：每一輪重新計算可達格，挑一個「露出格數夠多」的顏色，
+ * 盒子大小不超過目前露出的格數，然後照螞蟻的順序（近的先吃）把那些格子吃掉。
+ *
+ * 難度（陷阱盒）：每一輪有 trapRate 的機率，挑一個「幾乎還埋在中間」的顏色（露出不到 min/2 格）
+ * 先排進佇列，但在模擬裡要等到它真的吃得完才執行。玩家太早點它，隊伍就會卡在暫存格；
+ * 同時最多 trapMax 個陷阱在等待，所以全部卡滿暫存格就會輸。
+ *
+ * 回傳的陣列另外帶一個 solution 屬性：一種保證能過關的點選順序（佇列 index），測試用。
+ */
+function generateBoxes(grid, { min = 10, max = 50, seed = 1, trapRate = 0.12, trapMax = 5 } = {}) {
+  const rand = mulberry32(seed);
+  const { R, C, cells } = parseGrid(grid);
+  const work = cells.slice();
+  const free = countColors(work); // 還沒分配給任何盒子的格數
+  let unassigned = Object.values(free).reduce((a, b) => a + b, 0);
+  const boxes = [];
+  const solution = [];
+  const pending = []; // 已排進佇列、還在等的陷阱盒 index
+
+  const exposedByColor = (w) => {
+    const by = {};
+    for (const [i, e] of Rules.computeReach(w, R, C).exposed) (by[w[i]] ??= []).push([i, e.d]);
+    // 跟遊戲裡螞蟻挑目標的順序一樣：路徑短的先、靠下面的先
+    for (const k in by) by[k].sort((a, b) => a[1] - b[1] || b[0] - a[0]);
+    return by;
+  };
+  // 一隊螞蟻吃 n 格（邊吃邊打通路）；吃不完回傳 false
+  const eat = (w, color, n) => {
+    while (n > 0) {
+      const list = exposedByColor(w)[color];
+      if (!list) return false;
+      const k = Math.min(n, list.length);
+      for (let j = 0; j < k; j++) w[list[j][0]] = EMPTY;
+      n -= k;
+    }
+    return true;
+  };
+
+  while (unassigned > 0 || pending.length) {
+    // 1. 等待中的陷阱：現在派出吃得完就執行
+    const ready = pending.findIndex((q) => eat(work.slice(), boxes[q].color, boxes[q].count));
+    if (ready >= 0) {
+      const q = pending.splice(ready, 1)[0];
+      eat(work, boxes[q].color, boxes[q].count);
+      solution.push(q);
+      continue;
+    }
+    const byColor = exposedByColor(work);
+    const exposedFree = (k) => Math.min(byColor[k]?.length || 0, free[k]);
+
+    // 2. 放一個陷阱：挑大部分還埋著的顏色
+    if (pending.length < trapMax && rand() < trapRate) {
+      const cands = Object.keys(free).filter((k) => free[k] >= min && exposedFree(k) * 2 < min);
+      if (cands.length) {
+        const color = cands[Math.floor(rand() * cands.length)];
+        let size = min + Math.floor(rand() * (Math.min(max, free[color]) - min + 1));
+        const rest = free[color] - size;
+        if (rest > 0 && rest < min) size = free[color] <= max ? free[color] : free[color] - min;
+        boxes.push({ color, count: size });
+        pending.push(boxes.length - 1);
+        free[color] -= size;
+        unassigned -= size;
+        continue;
+      }
+    }
+
+    // 3. 一般盒：這個顏色現在最多能裝幾格（不超過露出的格數，也不留下不到一盒的零頭）
+    const maxSize = (k) => {
+      const avail = exposedFree(k), rem = free[k];
+      if (rem <= Math.min(max, avail)) return rem;
+      const size = Math.min(max, avail, rem - min);
+      return size >= min ? size : 0;
+    };
+    let options = Object.keys(byColor).map((k) => [k, maxSize(k)]).filter(([, m]) => m > 0);
+    if (!options.length) { // 沒有顏色湊得滿一盒，只好出小盒
+      options = Object.keys(byColor).map((k) => [k, exposedFree(k)]).filter(([, m]) => m > 0);
+      if (!options.length) return generateBoxes(grid, { min, max, seed: seed + 1000, trapRate, trapMax }); // 陷阱互相卡死，換一組
+    }
+    // 露出越多的顏色越容易被選到，盒子比較大
+    let pick = rand() * options.reduce((t, [, m]) => t + m, 0), color, cap;
+    for ([color, cap] of options) if ((pick -= cap) <= 0) break;
+    const size = cap === free[color] || cap <= min ? cap : min + Math.floor((1 - rand() * rand()) * (cap - min + 1)); // 偏向大盒
+    eat(work, color, size);
+    free[color] -= size;
+    unassigned -= size;
+    boxes.push({ color, count: size });
+    solution.push(boxes.length - 1);
+  }
+  boxes.solution = solution;
+  return boxes;
+}
+
+// =====================================================================
+// 3. 規則（純邏輯，不碰畫面）
+// =====================================================================
+const SLOT_COUNT = 5;        // 暫存格數量
+const QUEUE_VISIBLE = 10;    // 佇列中可以點選的盒子數
+const ANT_SPEED = 36;        // 螞蟻速度（格/秒）
+const DISPATCH_GAP = 0.06;   // 同一隊每一波的間隔（秒）
+const ANTS_PER_WAVE = 3;     // 每一波同時派出幾隻
+
+const Rules = {
+  neighbors(i, R, C) {
+    const r = Math.floor(i / C), c = i % C, out = [];
+    if (r > 0) out.push(i - C);
+    if (r < R - 1) out.push(i + C);
+    if (c > 0) out.push(i - 1);
+    if (c < C - 1) out.push(i + 1);
+    return out;
+  },
+  isBorder(i, R, C) {
+    const r = Math.floor(i / C), c = i % C;
+    return r === 0 || c === 0 || r === R - 1 || c === C - 1;
+  },
+
+  /**
+   * 可達性：從版面外圍經由空白格 BFS。
+   * 回傳 parent（空白格回到外面的上一步，-1 = 直接從外面進來）、
+   * exposed: Map<彩色格 index, {via, d}>  via = 從哪個空白格吃（-1 = 從外面直接吃），d = 路徑長
+   */
+  computeReach(cells, R, C) {
+    const n = R * C;
+    const dist = new Int32Array(n).fill(-1);
+    const parent = new Int32Array(n).fill(-2);
+    const queue = [];
+    for (let i = 0; i < n; i++)
+      if (cells[i] === EMPTY && Rules.isBorder(i, R, C)) { dist[i] = 0; parent[i] = -1; queue.push(i); }
+    for (let h = 0; h < queue.length; h++) {
+      const i = queue[h];
+      for (const j of Rules.neighbors(i, R, C))
+        if (cells[j] === EMPTY && dist[j] < 0) { dist[j] = dist[i] + 1; parent[j] = i; queue.push(j); }
+    }
+    const exposed = new Map();
+    for (let i = 0; i < n; i++) {
+      if (cells[i] === EMPTY) continue;
+      let best = Rules.isBorder(i, R, C) ? { via: -1, d: 0 } : null;
+      for (const j of Rules.neighbors(i, R, C))
+        if (dist[j] >= 0 && (!best || dist[j] + 1 < best.d)) best = { via: j, d: dist[j] + 1 };
+      if (best) exposed.set(i, best);
+    }
+    return { dist, parent, exposed };
+  },
+
+  // 從外面走到目標格的格子序列（最後一格是目標本身）
+  cellPath(reach, target) {
+    const path = [target];
+    let p = reach.exposed.get(target).via;
+    while (p >= 0) { path.push(p); p = reach.parent[p]; }
+    return path.reverse();
+  },
+};
+
+function createGame(level) {
+  const { R, C, cells } = parseGrid(level.grid);
+  const s = {
+    R, C, cells,
+    palette: level.palette,
+    left: cells.filter((v) => v !== EMPTY).length,
+    queue: level.boxes.map((b, id) => ({ id, color: b.color, count: b.count })),
+    slots: new Array(SLOT_COUNT).fill(null),
+    ants: [],
+    reserved: new Set(),
+    reach: null,
+    dirty: true,
+    status: 'playing', // playing | won | lost
+    time: 0,
+    effects: [], // 給畫面用的事件：{ type: 'eat', i, color, t }
+  };
+
+  const ensureReach = () => {
+    if (s.dirty) { s.reach = Rules.computeReach(s.cells, R, C); s.dirty = false; }
+    return s.reach;
+  };
+
+  // 找最近、未被預定的同色可達格；靠近底部的優先
+  function findTarget(color) {
+    const reach = ensureReach();
+    let best = -1, bd = Infinity;
+    for (const [i, e] of reach.exposed) {
+      if (s.cells[i] !== color || s.reserved.has(i)) continue;
+      const score = e.d * 100 - Math.floor(i / C);
+      if (score < bd) { bd = score; best = i; }
+    }
+    return best;
+  }
+
+  // 螞蟻路線（版面座標，單位 = 格）：暫存格 → 版面外緣 → 沿外圍 → 入口 → 空白格 → 目標
+  function antRoute(slot, target) {
+    const reach = ensureReach();
+    const cellsOnPath = Rules.cellPath(reach, target);
+    const first = cellsOnPath[0];
+    const fr = Math.floor(first / C), fc = first % C;
+    const sx = ((slot + 0.5) * C) / SLOT_COUNT;
+    const pts = [[sx, R + 1.2], [sx, R + 0.5]];
+    const L = -0.5, Rt = C + 0.5, T = -0.5, Bt = R + 0.5;
+    if (fr === R - 1) pts.push([fc + 0.5, Bt]);
+    else if (fc === 0) pts.push([L, Bt], [L, fr + 0.5]);
+    else if (fc === C - 1) pts.push([Rt, Bt], [Rt, fr + 0.5]);
+    else if (sx + fc < 2 * C - sx - fc) pts.push([L, Bt], [L, T], [fc + 0.5, T]);
+    else pts.push([Rt, Bt], [Rt, T], [fc + 0.5, T]);
+    for (const i of cellsOnPath) pts.push([(i % C) + 0.5, Math.floor(i / C) + 0.5]);
+    const seg = [0];
+    for (let k = 1; k < pts.length; k++) seg.push(seg[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+    return { pts, seg, length: seg[seg.length - 1] };
+  }
+
+  const api = {
+    state: s,
+    canTap(q) { return s.status === 'playing' && q < Math.min(QUEUE_VISIBLE, s.queue.length) && s.slots.includes(null); },
+
+    // 點螞蟻盒 → 進入暫存格
+    tapBox(q) {
+      if (!api.canTap(q)) return false;
+      const box = s.queue.splice(q, 1)[0];
+      const slot = s.slots.indexOf(null);
+      s.slots[slot] = { ...box, total: box.count, dispatched: 0, eaten: 0, cooldown: 0, waiting: false };
+      return true;
+    },
+
+    step(dt) {
+      if (s.status !== 'playing') return;
+      s.time += dt;
+
+      // 派出螞蟻
+      s.slots.forEach((team, k) => {
+        if (!team || team.dispatched >= team.total) { if (team) team.waiting = false; return; }
+        team.cooldown -= dt;
+        if (team.cooldown > 0) return;
+        // 每一波同時派出多隻，各自去不同的目標格
+        let sent = 0;
+        while (sent < ANTS_PER_WAVE && team.dispatched < team.total) {
+          const target = findTarget(team.color);
+          if (target < 0) break;
+          s.reserved.add(target);
+          s.ants.push({ team, slot: k, target, route: antRoute(k, target), d: 0 });
+          team.dispatched++;
+          sent++;
+        }
+        team.waiting = sent === 0;
+        if (sent > 0) team.cooldown = DISPATCH_GAP;
+      });
+
+      // 螞蟻前進、抵達就吃掉
+      for (let a = s.ants.length - 1; a >= 0; a--) {
+        const ant = s.ants[a];
+        ant.d += ANT_SPEED * dt;
+        if (ant.d < ant.route.length) continue;
+        s.effects.push({ type: 'eat', i: ant.target, color: s.cells[ant.target], t: s.time });
+        s.cells[ant.target] = EMPTY;
+        s.reserved.delete(ant.target);
+        s.left--;
+        s.dirty = true;
+        s.ants.splice(a, 1);
+        const team = ant.team;
+        team.eaten++;
+        if (team.eaten === team.total) s.slots[ant.slot] = null; // 吃完離開
+      }
+
+      api.updateStatus();
+    },
+
+    updateStatus() {
+      if (s.left === 0 && s.ants.length === 0) { s.status = 'won'; return; }
+      if (s.ants.length > 0) return;
+      const teams = s.slots.filter(Boolean);
+      const allStuck = teams.every((t) => findTarget(t.color) < 0);
+      const full = teams.length === SLOT_COUNT;
+      const noMoreBoxes = s.queue.length === 0;
+      if (allStuck && (full || noMoreBoxes) && s.left > 0) s.status = 'lost';
+    },
+  };
+  return api;
+}
+
+// =====================================================================
+// 4. 畫面繪製（只讀取 state，不改規則）
+// =====================================================================
+function createRenderer(canvas) {
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, L = null;
+  // 版面先畫在離屏圖層，之後只重畫被吃掉的格子（80×80 每幀全畫太慢）
+  const layer = document.createElement('canvas');
+  const lctx = layer.getContext('2d');
+  let shown = null; // 圖層上目前畫的格子內容，用來跟 state.cells 比對
+
+  function resize(game) {
+    const dpr = window.devicePixelRatio || 1;
+    W = canvas.clientWidth; H = canvas.clientHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const { R, C } = game.state;
+    const pad = 12, gap = 8;
+    const box = Math.floor(Math.min(64, (W - pad * 2 - gap * 4) / 5)); // 正方形螞蟻盒邊長
+    const queueRows = Math.ceil(QUEUE_VISIBLE / 5);
+    const below = 14 + box + 20 + queueRows * (box + gap) + 24;
+    // 80×80 格子很小，允許非整數格寬，繪製時再對齊像素
+    const cell = Math.max(3, Math.min((W - pad * 2) / (C + 1), (H - pad * 2 - below) / (R + 1)));
+    const bx = (W - cell * C) / 2, by = pad + cell * 0.5;
+    const slotTop = by + cell * R + 14;
+    const queueTop = slotTop + box + 20;
+    L = { cell, bx, by, slotTop, queueTop, box, gap };
+    layer.width = canvas.width; layer.height = canvas.height;
+    lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    shown = null;
+  }
+
+  // ---- 立體方塊：左上亮邊、右下暗邊、中間正面 ----
+  const shadeCache = {};
+  const mix = (hex, to, k) => {
+    const a = parseInt(hex.slice(1), 16), b = parseInt(to.slice(1), 16);
+    const ch = (sh) => Math.round(((a >> sh) & 255) * (1 - k) + ((b >> sh) & 255) * k);
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  };
+  const shades = (hex) => (shadeCache[hex] ??= { hi: mix(hex, '#ffffff', 0.4), lo: mix(hex, '#000000', 0.32) });
+
+  function drawBlock(g, x, y, w, h, hex) {
+    const { hi, lo } = shades(hex);
+    const b = Math.max(1, Math.round(Math.min(w, h) * 0.16));
+    g.fillStyle = lo; g.fillRect(x, y, w, h);
+    g.fillStyle = hi; g.fillRect(x, y, w - b, h - b);
+    g.fillStyle = hex; g.fillRect(x + b, y + b, w - 2 * b, h - 2 * b);
+  }
+
+  function drawLayerCell(s, i) {
+    const C = s.C, r = Math.floor(i / C), c = i % C, v = s.cells[i];
+    const x = gx(c), y = gy(r), w = gx(c + 1) - x, h = gy(r + 1) - y;
+    if (v === EMPTY) {
+      lctx.fillStyle = (r + c) % 2 ? '#ede4d3' : '#e6dcc8';
+      lctx.fillRect(x, y, w, h);
+    } else {
+      drawBlock(lctx, x, y, w, h, s.palette[v]);
+    }
+  }
+
+  function syncLayer(s) {
+    if (!shown) {
+      lctx.clearRect(0, 0, W, H);
+      for (let i = 0; i < s.cells.length; i++) drawLayerCell(s, i);
+      shown = s.cells.slice();
+      return;
+    }
+    for (let i = 0; i < s.cells.length; i++)
+      if (s.cells[i] !== shown[i]) { drawLayerCell(s, i); shown[i] = s.cells[i]; }
+  }
+
+  // 第 n 條格線的螢幕座標（四捨五入避免格子之間出現細縫）
+  const gx = (c) => Math.round(L.bx + c * L.cell);
+  const gy = (r) => Math.round(L.by + r * L.cell);
+
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+    // iOS 16 以前的 Safari 沒有 roundRect
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  };
+  const textOn = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.6 ? '#3b2a1a' : '#fff';
+  };
+
+  // 暫存格：正方形，置中在螞蟻出發的位置下方
+  function slotRect(k, C) {
+    const w = (C * L.cell) / SLOT_COUNT;
+    const size = Math.min(L.box, w - 6);
+    return [L.bx + (k + 0.5) * w - size / 2, L.slotTop, size, size];
+  }
+  // 螞蟻盒：正方形，每列 5 個置中排列
+  function boxRect(q) {
+    const col = q % 5, row = Math.floor(q / 5);
+    const left = (W - (5 * L.box + 4 * L.gap)) / 2;
+    return [left + col * (L.box + L.gap), L.queueTop + row * (L.box + L.gap), L.box, L.box];
+  }
+
+  function draw(game) {
+    const s = game.state, { R, C } = s, { cell, bx, by } = L;
+    ctx.clearRect(0, 0, W, H);
+
+    // 版面（空白格以淡色棋盤格表示）
+    syncLayer(s);
+    ctx.drawImage(layer, 0, 0, W, H);
+
+    // 被吃掉的縮小效果
+    const EAT_T = 0.3;
+    s.effects = s.effects.filter((e) => s.time - e.t < EAT_T);
+    for (const e of s.effects) {
+      const k = 1 - (s.time - e.t) / EAT_T, sz = Math.max(1, cell * k);
+      drawBlock(ctx, bx + (e.i % C) * cell + (cell - sz) / 2, by + Math.floor(e.i / C) * cell + (cell - sz) / 2, sz, sz, s.palette[e.color]);
+    }
+
+    // 螞蟻
+    const rad = Math.max(2.5, cell * 0.32);
+    for (const ant of s.ants) {
+      const { pts, seg } = ant.route;
+      let k = 1;
+      while (k < seg.length - 1 && seg[k] < ant.d) k++;
+      const t = Math.min(1, (ant.d - seg[k - 1]) / (seg[k] - seg[k - 1] || 1));
+      const x = pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t;
+      const y = pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t;
+      ctx.beginPath();
+      ctx.arc(bx + x * cell, by + y * cell, rad, 0, Math.PI * 2);
+      ctx.fillStyle = s.palette[ant.team.color];
+      ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#2b1a0e'; ctx.stroke();
+    }
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+    // 暫存格
+    s.slots.forEach((team, k) => {
+      const [x, y, w, h] = slotRect(k, C);
+      roundRect(x, y, w, h, 6);
+      if (!team) {
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = '#a8916f'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+        return;
+      }
+      ctx.fillStyle = s.palette[team.color]; ctx.fill();
+      ctx.strokeStyle = '#7a5530'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = textOn(s.palette[team.color]);
+      ctx.font = `bold ${Math.round(w * 0.32)}px system-ui`;
+      ctx.fillText(team.total - team.eaten, x + w / 2, y + h / 2);
+    });
+
+    // 螞蟻盒佇列
+    const canAny = s.slots.includes(null) && s.status === 'playing';
+    ctx.font = `bold ${Math.round(L.box * 0.32)}px system-ui`;
+    for (let q = 0; q < Math.min(QUEUE_VISIBLE, s.queue.length); q++) {
+      const box = s.queue[q];
+      const [x, y, w, h] = boxRect(q);
+      ctx.globalAlpha = canAny ? 1 : 0.45;
+      roundRect(x, y, w, h, 6);
+      ctx.fillStyle = s.palette[box.color]; ctx.fill();
+      ctx.strokeStyle = '#7a5530'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = textOn(s.palette[box.color]);
+      ctx.fillText(box.count, x + w / 2, y + h / 2);
+      ctx.globalAlpha = 1;
+    }
+    const more = s.queue.length - QUEUE_VISIBLE;
+    ctx.fillStyle = '#8a7458'; ctx.font = '13px system-ui';
+    const rows = Math.ceil(QUEUE_VISIBLE / 5);
+    ctx.fillText(s.queue.length === 0 ? '螞蟻盒已全部派出' : more > 0 ? `後面還有 ${more} 盒` : '', W / 2, L.queueTop + rows * (L.box + L.gap) + 8);
+  }
+
+  function hitQueue(x, y, game) {
+    for (let q = 0; q < Math.min(QUEUE_VISIBLE, game.state.queue.length); q++) {
+      const [bx, by, w, h] = boxRect(q);
+      if (x >= bx && x <= bx + w && y >= by && y <= by + h) return q;
+    }
+    return -1;
+  }
+
+  return { resize, draw, hitQueue };
+}
+
+// =====================================================================
+// 5. 主程式：遊戲迴圈與輸入
+// =====================================================================
+// 由 generateBoxes(LEVEL_1.grid, { seed: 7 }) 產生（含陷阱盒，trapRate 0.12）
+const BOXES_LEVEL_1 = [
+  { color: 'B', count: 50 }, { color: 'L', count: 20 }, { color: 'G', count: 43 }, { color: 'G', count: 46 },
+  { color: 'S', count: 44 }, { color: 'S', count: 44 }, { color: 'S', count: 44 }, { color: 'S', count: 30 },
+  { color: 'G', count: 26 }, { color: 'G', count: 50 }, { color: 'S', count: 50 }, { color: 'S', count: 42 },
+  { color: 'G', count: 41 }, { color: 'L', count: 45 }, { color: 'S', count: 42 }, { color: 'T', count: 47 },
+  { color: 'G', count: 26 }, { color: 'W', count: 36 }, { color: 'G', count: 30 }, { color: 'G', count: 32 },
+  { color: 'W', count: 23 }, { color: 'H', count: 13 }, { color: 'G', count: 39 }, { color: 'L', count: 22 },
+  { color: 'L', count: 48 }, { color: 'G', count: 50 }, { color: 'G', count: 33 }, { color: 'G', count: 39 },
+  { color: 'G', count: 30 }, { color: 'G', count: 45 }, { color: 'G', count: 47 }, { color: 'S', count: 43 },
+  { color: 'G', count: 31 }, { color: 'G', count: 32 }, { color: 'G', count: 46 }, { color: 'G', count: 23 },
+  { color: 'S', count: 40 }, { color: 'G', count: 49 }, { color: 'G', count: 47 }, { color: 'S', count: 50 },
+  { color: 'S', count: 15 }, { color: 'S', count: 48 }, { color: 'G', count: 39 }, { color: 'L', count: 15 },
+  { color: 'H', count: 14 }, { color: 'S', count: 44 }, { color: 'G', count: 48 }, { color: 'S', count: 22 },
+  { color: 'G', count: 44 }, { color: 'K', count: 13 }, { color: 'L', count: 19 }, { color: 'K', count: 10 },
+  { color: 'G', count: 43 }, { color: 'K', count: 12 }, { color: 'G', count: 38 }, { color: 'G', count: 46 },
+  { color: 'S', count: 29 }, { color: 'S', count: 48 }, { color: 'P', count: 15 }, { color: 'T', count: 17 },
+  { color: 'G', count: 18 }, { color: 'S', count: 39 }, { color: 'G', count: 39 }, { color: 'G', count: 32 },
+  { color: 'G', count: 44 }, { color: 'G', count: 48 }, { color: 'G', count: 40 }, { color: 'G', count: 16 },
+  { color: 'S', count: 49 }, { color: 'G', count: 36 }, { color: 'P', count: 16 }, { color: 'S', count: 32 },
+  { color: 'G', count: 40 }, { color: 'P', count: 12 }, { color: 'S', count: 45 }, { color: 'L', count: 36 },
+  { color: 'S', count: 44 }, { color: 'G', count: 49 }, { color: 'L', count: 12 }, { color: 'S', count: 38 },
+  { color: 'G', count: 45 }, { color: 'S', count: 42 }, { color: 'G', count: 45 }, { color: 'S', count: 27 },
+  { color: 'S', count: 45 }, { color: 'P', count: 22 }, { color: 'G', count: 49 }, { color: 'S', count: 22 },
+  { color: 'S', count: 49 }, { color: 'B', count: 15 }, { color: 'S', count: 45 }, { color: 'S', count: 43 },
+  { color: 'L', count: 48 }, { color: 'P', count: 20 }, { color: 'G', count: 47 }, { color: 'D', count: 23 },
+  { color: 'S', count: 42 }, { color: 'R', count: 21 }, { color: 'S', count: 39 }, { color: 'P', count: 19 },
+  { color: 'G', count: 27 }, { color: 'F', count: 13 }, { color: 'G', count: 26 }, { color: 'W', count: 12 },
+  { color: 'G', count: 27 }, { color: 'G', count: 20 }, { color: 'S', count: 34 }, { color: 'G', count: 16 },
+  { color: 'S', count: 37 }, { color: 'B', count: 18 }, { color: 'W', count: 12 }, { color: 'S', count: 49 },
+  { color: 'S', count: 50 }, { color: 'S', count: 30 }, { color: 'W', count: 11 }, { color: 'R', count: 12 },
+  { color: 'F', count: 10 }, { color: 'B', count: 18 }, { color: 'Y', count: 14 }, { color: 'B', count: 17 },
+  { color: 'W', count: 11 }, { color: 'H', count: 15 }, { color: 'P', count: 23 }, { color: 'S', count: 42 },
+  { color: 'L', count: 22 }, { color: 'B', count: 23 }, { color: 'O', count: 25 }, { color: 'S', count: 39 },
+  { color: 'R', count: 21 }, { color: 'S', count: 50 }, { color: 'O', count: 22 }, { color: 'W', count: 16 },
+  { color: 'O', count: 31 }, { color: 'O', count: 43 }, { color: 'S', count: 45 }, { color: 'K', count: 18 },
+  { color: 'O', count: 20 }, { color: 'W', count: 18 }, { color: 'B', count: 28 }, { color: 'O', count: 45 },
+  { color: 'F', count: 16 }, { color: 'B', count: 26 }, { color: 'G', count: 10 }, { color: 'Y', count: 16 },
+  { color: 'P', count: 20 }, { color: 'G', count: 10 }, { color: 'F', count: 12 }, { color: 'K', count: 16 },
+  { color: 'O', count: 39 }, { color: 'F', count: 17 }, { color: 'O', count: 43 }, { color: 'O', count: 38 },
+  { color: 'S', count: 36 }, { color: 'S', count: 32 }, { color: 'S', count: 20 }, { color: 'F', count: 12 },
+  { color: 'O', count: 16 }, { color: 'O', count: 15 }, { color: 'B', count: 16 }, { color: 'O', count: 45 },
+  { color: 'F', count: 15 }, { color: 'B', count: 19 }, { color: 'S', count: 16 }, { color: 'O', count: 26 },
+  { color: 'O', count: 12 }, { color: 'K', count: 19 }, { color: 'O', count: 38 }, { color: 'Y', count: 31 },
+  { color: 'S', count: 22 }, { color: 'O', count: 34 }, { color: 'O', count: 33 }, { color: 'S', count: 14 },
+  { color: 'Y', count: 17 }, { color: 'B', count: 26 }, { color: 'W', count: 26 }, { color: 'W', count: 16 },
+  { color: 'K', count: 31 }, { color: 'K', count: 15 }, { color: 'B', count: 16 }, { color: 'Y', count: 32 },
+  { color: 'W', count: 14 }, { color: 'O', count: 30 }, { color: 'W', count: 16 }, { color: 'K', count: 19 },
+  { color: 'B', count: 14 }, { color: 'K', count: 19 }, { color: 'O', count: 28 }, { color: 'F', count: 14 },
+  { color: 'K', count: 15 }, { color: 'O', count: 27 }, { color: 'O', count: 16 }, { color: 'B', count: 11 },
+  { color: 'F', count: 17 }, { color: 'W', count: 29 }, { color: 'B', count: 17 }, { color: 'O', count: 27 },
+  { color: 'W', count: 20 }, { color: 'Y', count: 33 }, { color: 'K', count: 14 }, { color: 'K', count: 11 },
+  { color: 'Y', count: 35 }, { color: 'O', count: 25 }, { color: 'Y', count: 12 }, { color: 'O', count: 19 },
+  { color: 'F', count: 12 }, { color: 'W', count: 26 }, { color: 'Y', count: 19 }, { color: 'Y', count: 14 },
+  { color: 'P', count: 19 }, { color: 'O', count: 13 }, { color: 'O', count: 12 }, { color: 'B', count: 33 },
+  { color: 'F', count: 17 }, { color: 'B', count: 15 }, { color: 'F', count: 18 }, { color: 'K', count: 12 },
+  { color: 'W', count: 26 }, { color: 'O', count: 10 }, { color: 'F', count: 13 }, { color: 'B', count: 12 },
+  { color: 'B', count: 11 }, { color: 'F', count: 18 }, { color: 'K', count: 11 }, { color: 'F', count: 14 },
+  { color: 'W', count: 26 }, { color: 'F', count: 15 }, { color: 'B', count: 11 }, { color: 'F', count: 10 },
+  { color: 'W', count: 11 }, { color: 'K', count: 7 }, { color: 'K', count: 4 }, { color: 'S', count: 14 },
+  { color: 'S', count: 5 }, { color: 'O', count: 10 }, { color: 'O', count: 1 }, { color: 'Y', count: 12 },
+  { color: 'Y', count: 1 }, { color: 'B', count: 8 }, { color: 'W', count: 5 }, { color: 'B', count: 2 },
+  { color: 'F', count: 13 }, { color: 'F', count: 5 },
+];
+LEVEL_1.boxes = BOXES_LEVEL_1 || generateBoxes(LEVEL_1.grid, { seed: 7 });
+
+const canvas = document.getElementById('cv');
+const renderer = createRenderer(canvas);
+let game = null;
+let speed = 1;
+let shownStatus = 'playing';
+
+function start() {
+  const errors = validateLevel(LEVEL_1);
+  if (errors.length) { showOverlay('關卡資料錯誤', errors.join('\n')); console.error(errors); return; }
+  game = createGame(LEVEL_1);
+  shownStatus = 'playing';
+  document.getElementById('overlay').classList.add('hidden');
+  renderer.resize(game);
+}
+
+function showOverlay(title, text) {
+  document.getElementById('ovTitle').textContent = title;
+  document.getElementById('ovText').textContent = text;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+function updateInfo() {
+  const s = game.state;
+  document.getElementById('info').textContent = `剩 ${s.left} 格・${s.queue.length} 盒`;
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (game) {
+    game.step(dt * speed);
+    renderer.draw(game);
+    updateInfo();
+    const st = game.state.status;
+    if (st !== shownStatus) {
+      shownStatus = st;
+      if (st === 'won') showOverlay('過關！🐜', `用時 ${game.state.time.toFixed(1)} 秒`);
+      if (st === 'lost') showOverlay('失敗', '暫存格滿了，而且沒有隊伍吃得到東西');
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const q = renderer.hitQueue(e.clientX - rect.left, e.clientY - rect.top, game);
+  if (q >= 0) game.tapBox(q);
+});
+document.getElementById('speedBtn').onclick = (e) => {
+  speed = speed === 1 ? 2 : 1;
+  e.target.textContent = speed + 'x';
+  e.target.classList.toggle('on', speed === 2);
+};
+document.getElementById('restartBtn').onclick = start;
+document.getElementById('ovBtn').onclick = start;
+const onResize = () => game && renderer.resize(game);
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 300)); // iPhone 轉向後尺寸會晚一點才更新
+window.visualViewport?.addEventListener('resize', onResize); // Safari 網址列收合時
+
+start();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
