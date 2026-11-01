@@ -345,8 +345,22 @@ function generateBoxes(grid, { min = 10, max = 50, maxByColor = {}, seed = 1, tr
     boxes.push({ color, count: size });
     solution.push(boxes.length - 1);
   }
-  boxes.solution = solution;
-  return boxes;
+  // 不到 min 的小盒：併進同色、點選順序上最接近的下一盒（沒有的話就併進前一盒）
+  const turn = new Map(solution.map((p, t) => [p, t]));
+  for (const p of solution) {
+    const b = boxes[p];
+    if (b.count === 0 || b.count >= min) continue;
+    const same = solution.filter((q) => q !== p && boxes[q].color === b.color && boxes[q].count > 0);
+    if (!same.length) continue; // 這個顏色總數本來就不到 min
+    const q = same.find((x) => turn.get(x) > turn.get(p)) ?? same[same.length - 1];
+    boxes[q].count += b.count;
+    b.count = 0;
+  }
+  const kept = boxes.map((b, i) => i).filter((i) => boxes[i].count > 0);
+  const renumber = new Map(kept.map((i, k) => [i, k]));
+  const result = kept.map((i) => boxes[i]);
+  result.solution = solution.filter((p) => renumber.has(p)).map((p) => renumber.get(p));
+  return result;
 }
 
 /**
@@ -831,7 +845,7 @@ const LANES_LEVEL_1 = [
     { color: 'R', count: 18 }, { color: 'L', count: 17 }, { color: 'P', count: 18 }, { color: 'T', count: 17 },
     { color: 'F', count: 11 }, { color: 'G', count: 13 }, { color: 'O', count: 14 }, { color: 'F', count: 19 },
     { color: 'B', count: 12 }, { color: 'Y', count: 10 }, { color: 'F', count: 15 }, { color: 'B', count: 10 },
-    { color: 'F', count: 11 }, { color: 'L', count: 8 }, { color: 'Y', count: 5 }, { color: 'K', count: 5 },
+    { color: 'P', count: 17 }, { color: 'K', count: 19 },
   ],
   [ // 第 2 行（由上往下）
     { color: 'G', count: 100 }, { color: 'S', count: 94 }, { color: 'L', count: 23 }, { color: 'S', count: 92 },
@@ -844,8 +858,7 @@ const LANES_LEVEL_1 = [
     { color: 'O', count: 19 }, { color: 'S', count: 14 }, { color: 'Y', count: 17 }, { color: 'K', count: 23 },
     { color: 'O', count: 26 }, { color: 'B', count: 13 }, { color: 'O', count: 34 }, { color: 'K', count: 11 },
     { color: 'Y', count: 13 }, { color: 'F', count: 19 }, { color: 'K', count: 12 }, { color: 'O', count: 12 },
-    { color: 'W', count: 12 }, { color: 'F', count: 3 }, { color: 'S', count: 10 }, { color: 'K', count: 14 },
-    { color: 'Y', count: 1 },
+    { color: 'W', count: 15 }, { color: 'S', count: 10 }, { color: 'O', count: 11 },
   ],
   [ // 第 3 行（由上往下）
     { color: 'G', count: 109 }, { color: 'L', count: 32 }, { color: 'S', count: 98 }, { color: 'G', count: 54 },
@@ -869,8 +882,7 @@ const LANES_LEVEL_1 = [
     { color: 'S', count: 22 }, { color: 'O', count: 42 }, { color: 'O', count: 41 }, { color: 'S', count: 17 },
     { color: 'F', count: 12 }, { color: 'B', count: 18 }, { color: 'B', count: 10 }, { color: 'F', count: 15 },
     { color: 'D', count: 12 }, { color: 'B', count: 18 }, { color: 'W', count: 22 }, { color: 'F', count: 19 },
-    { color: 'W', count: 29 }, { color: 'W', count: 15 }, { color: 'W', count: 3 }, { color: 'P', count: 1 },
-    { color: 'Y', count: 9 }, { color: 'O', count: 11 },
+    { color: 'W', count: 29 }, { color: 'W', count: 15 }, { color: 'F', count: 14 }, { color: 'Y', count: 17 },
   ],
   [ // 第 5 行（由上往下）
     { color: 'B', count: 50 }, { color: 'S', count: 55 }, { color: 'B', count: 15 }, { color: 'F', count: 12 },
@@ -881,7 +893,7 @@ const LANES_LEVEL_1 = [
     { color: 'K', count: 33 }, { color: 'K', count: 16 }, { color: 'W', count: 25 }, { color: 'Y', count: 19 },
     { color: 'O', count: 20 }, { color: 'Y', count: 25 }, { color: 'O', count: 32 }, { color: 'W', count: 27 },
     { color: 'O', count: 18 }, { color: 'F', count: 16 }, { color: 'B', count: 17 }, { color: 'F', count: 11 },
-    { color: 'B', count: 10 }, { color: 'P', count: 16 }, { color: 'L', count: 2 }, { color: 'Y', count: 2 },
+    { color: 'B', count: 10 }, { color: 'L', count: 10 },
   ],
 ];
 LEVEL_1.lanes = LANES_LEVEL_1 || boxesToLanes(generateBoxes(LEVEL_1.grid, LEVEL_1_GEN));
