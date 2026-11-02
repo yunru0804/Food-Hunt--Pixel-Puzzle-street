@@ -74,7 +74,7 @@ python3 -m http.server 8000 --bind 0.0.0.0
 
 ```js
 const LEVEL_1_GEN = { seed: 7, maxByColor: { S: 120, L: 120, G: 120, H: 120 } }; // 天空、草地
-const LEVEL_2_GEN = { seed: 7, maxByColor: { A: 120 } };                        // 背景粉
+const LEVEL_2_GEN = { seed: 8, maxByColor: { A: 120, E: 120 } };                // 背景粉、邊邊粉
 ```
 
 1. 修改 `LEVEL_N_GEN`，或改 `generateBoxes` 的參數。
