@@ -1,6 +1,6 @@
 # Food Hunt：螞蟻搬方塊
 
-手機直式畫面的網頁益智小遊戲，目前有 2 關：Level 1 松鼠、Level 2 兔子。每關版面上是一幅 80×80 的像素畫，玩家從下方選螞蟻盒，派螞蟻把同色方塊一格一格搬回洞裡，整幅畫搬完就過關。
+手機直式畫面的網頁益智小遊戲，目前有 3 關：Level 1 松鼠、Level 2 兔子、Level 3 皮卡丘。每關版面上是一幅 80×80 的像素畫，玩家從下方選螞蟻盒，派螞蟻把同色方塊一格一格搬回洞裡，整幅畫搬完就過關。
 
 單一 HTML 檔，用原生 JavaScript 和 Canvas 寫成，不需要後端，也不需要安裝套件。
 
@@ -34,8 +34,8 @@ python3 -m http.server 8000 --bind 0.0.0.0
 ## 新增關卡
 
 1. 把圖片轉成 80×80 的 `grid` 和 `palette`，參考 `LEVEL_2` 的格式。
-2. 加上 `LEVEL_3_GEN`，並設定 `LEVEL_3.lanes = LANES_LEVEL_3 || boxesToLanes(generateBoxes(LEVEL_3.grid, LEVEL_3_GEN))`。
-3. 把 `LEVEL_3` 加進 `LEVELS`，關卡選擇畫面就會自動多一格。
+2. 加上 `LEVEL_4_GEN`，並設定 `LEVEL_4.lanes = LANES_LEVEL_4 || boxesToLanes(generateBoxes(LEVEL_4.grid, LEVEL_4_GEN))`。
+3. 把 `LEVEL_4` 加進 `LEVELS`，關卡選擇畫面就會自動多一格。
 
 ## 檔案
 
@@ -49,7 +49,7 @@ python3 -m http.server 8000 --bind 0.0.0.0
 
 ## 程式結構（`index.html` 的 `<script>`）
 
-1. **關卡資料** `LEVEL_1`（松鼠）、`LEVEL_2`（兔子）：色盤 `palette`，加上像素畫 `grid`（每列一個字串，每個字元是一格的顏色代碼）。
+1. **關卡資料** `LEVEL_1`（松鼠）、`LEVEL_2`（兔子）、`LEVEL_3`（皮卡丘）：色盤 `palette`，加上像素畫 `grid`（每列一個字串，每個字元是一格的顏色代碼）。
 2. **關卡工具**：`parseGrid`、`validateLevel`（檢查盒子總數是否等於各色格數）、`generateBoxes`、`boxesToLanes`。
 3. **規則**（純邏輯，不碰畫面）：`Rules.computeReach` 用 BFS 算可達性；`createGame()` 管狀態、派螞蟻和勝負判定。
 4. **繪製**（只讀取狀態）：`createRenderer()` 負責版面、外框、螞蟻洞、螞蟻、暫存格和螞蟻盒。版面先畫在離屏圖層，只重畫被搬走的格子。
@@ -75,6 +75,7 @@ python3 -m http.server 8000 --bind 0.0.0.0
 ```js
 const LEVEL_1_GEN = { seed: 7, maxByColor: { S: 120, L: 120, G: 120, H: 120 } }; // 天空、草地
 const LEVEL_2_GEN = { seed: 8, maxByColor: { A: 120, E: 120 } };                // 背景粉、邊邊粉
+const LEVEL_3_GEN = { seed: 9 };                                                 // 全部用預設上限 50
 ```
 
 1. 修改 `LEVEL_N_GEN`，或改 `generateBoxes` 的參數。
