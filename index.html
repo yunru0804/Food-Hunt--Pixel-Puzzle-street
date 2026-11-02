@@ -33,8 +33,8 @@
   /* 上方列：重來｜Level｜2x */
   .bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 10px 14px 4px; padding-top: max(10px, env(safe-area-inset-top)); }
   .bar .title { font-size: 30px; font-weight: 900; letter-spacing: .5px; color: var(--ink); text-shadow: 0 2px 0 rgba(255,255,255,.55); }
-  .icon-btn {
-    justify-self: start; width: 46px; height: 46px; border-radius: 13px; border: 3px solid #6a32b8;
+  .bar-left { justify-self: start; display: flex; gap: 8px; }
+  .icon-btn { width: 46px; height: 46px; border-radius: 13px; border: 3px solid #6a32b8;
     background: #9b5de5; color: #fff; font-size: 24px; font-weight: 900; line-height: 1; box-shadow: 0 4px 0 #6a32b8;
   }
   .speed-btn {
@@ -63,6 +63,21 @@
   }
   .start-btn:active { box-shadow: 0 2px 0 #3f9a2c; }
 
+  /* 關卡選擇：只顯示關卡編號，不顯示題目圖 */
+  .level-grid { display: grid; grid-template-columns: repeat(3, 92px); gap: 16px; margin: 6px 0 4px; }
+  .level-card {
+    height: 100px; border-radius: 18px; border: 4px solid #d9822b; background: #ffb02e; color: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    box-shadow: 0 6px 0 #d9822b;
+  }
+  .level-card:active { box-shadow: 0 2px 0 #d9822b; }
+  .level-card .num { font-size: 38px; font-weight: 900; line-height: 1;
+    text-shadow: 2px 0 0 #a85a10, -2px 0 0 #a85a10, 0 2px 0 #a85a10, 0 -2px 0 #a85a10, 2px 2px 0 #a85a10, -2px 2px 0 #a85a10, 2px -2px 0 #a85a10, -2px -2px 0 #a85a10; }
+  .level-card .state { font-size: 13px; font-weight: 800; color: #7a3f08; }
+  .level-card.cleared { background: #6fd34f; border-color: #3f9a2c; box-shadow: 0 6px 0 #3f9a2c; }
+  .level-card.cleared .state { color: #22621a; }
+  .link-btn { margin-top: 10px; background: none; border: none; color: var(--ink); font-size: 17px; font-weight: 800; }
+
   /* 過關／失敗 */
   .overlay { position: fixed; inset: 0; z-index: 6; background: rgba(60,30,10,.45); display: grid; place-items: center; padding: 16px; }
   .overlay.hidden { display: none; }
@@ -78,8 +93,11 @@
 <body>
 <div id="app">
   <div class="bar">
-    <button id="restartBtn" class="icon-btn" aria-label="重來">↻</button>
-    <div class="title">Level 999</div>
+    <div class="bar-left">
+      <button id="backBtn" class="icon-btn" aria-label="選擇關卡">◀</button>
+      <button id="restartBtn" class="icon-btn" aria-label="重來">↻</button>
+    </div>
+    <div class="title" id="levelTitle">Level 1</div>
     <button id="speedBtn" class="speed-btn" aria-label="2 倍速">▶▶2x</button>
   </div>
   <canvas id="cv"></canvas>
@@ -92,10 +110,16 @@
   <button class="start-btn" id="startBtn">START</button>
 </div>
 
+<div class="start hidden" id="levelScreen">
+  <div class="logo">選擇關卡</div>
+  <div class="level-grid" id="levelGrid"></div>
+  <button class="link-btn" id="levelBack">◀ 回首頁</button>
+</div>
+
 <div class="overlay hidden" id="overlay">
   <div class="card">
     <h2 id="ovTitle"></h2><p id="ovText"></p>
-    <div class="card-actions"><button class="ghost" id="ovHome">回首頁</button><button id="ovBtn">再玩一次</button></div>
+    <div class="card-actions"><button class="ghost" id="ovHome">選擇關卡</button><button id="ovBtn">再玩一次</button></div>
   </div>
 </div>
 
@@ -206,6 +230,105 @@ const LEVEL_1 = {
     'GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGHGGHGGGGGGGHGGGHGGGGGGGGGGGHGGGHGGGGGGGGGHGGGGGGGG',
   ],
   lanes: null, // 由 generateBoxes() + boxesToLanes() 產生後填入（見下方 LANES_LEVEL_1）
+};
+
+// 第 2 關：由 picture/rabbit.jpg 轉換（以愛心為中心裁成正方形、校正光照後分成 80×80）
+const LEVEL_2 = {
+  name: '兔子',
+  palette: {
+    A: '#f6e3e8', // 背景粉
+    H: '#e58a98', // 愛心
+    W: '#ffffff', // 白兔
+    P: '#f4b8c8', // 粉兔
+    C: '#e893a9', // 粉兔臉頰
+    Q: '#f9cbd6', // 白兔臉頰
+    K: '#3a2619', // 輪廓
+    U: '#b9d7e8', // 藍點點
+    Y: '#f2e49a', // 黃點點、眼睛
+  },
+  grid: [
+    'AAAAAAAAAAAAAAAAAAQQQQQQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQ',
+    'AAAAAAAAAAAAAAAAAAQQQQQQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQ',
+    'AAAAAAAAAAAAAAAAAAQQQQQQQAAAAAAAAAAAAAAAAAAAAAAAAQQQQQAAAAAAAAAAAAAAAAAAAAAAAAAQ',
+    'AAAAAAAAAAAAAAKKKKKKQQQQQAAAAAAAAAAAAAAAAAAAAAKKKKKKKKKKKAAAAAAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAKKKKKKKKKKKKKKKKAAAAAAAAAAAAAAAAAAAKKKKKKKKKKKKKKKKKKKAAAAAAAAAAAAAAAAAA',
+    'AAAAAKKKKKKKKHHHHHHHKKKKKKKAAAAUUUUUAAAAKKKKKKHHHHHHHHHHHHKKKKKKAAYYYYAAAAAAAAAA',
+    'AAAKKKKKHHHHHHHHHHHHHHHHKKKKKAUUUUUUUAAKKKKHHHHHHHHHHHHHHHHHHHKKKKYYYYYAAAAAAAAA',
+    'AKKKKKHHHHHHHHHHHHHHHHHHHHKKKKUUUUUUUKKKKHHHHHHHHHHHHHHHHHHHHHHHKKKKYYYAAAAAAAAA',
+    'KKKHHHHHHHHHHHHHHHHHHHHHHHHHKKKUUUUUKKKHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKYYAAAAAAAAA',
+    'KKHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKUUKKKHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKAAAAAAAAA',
+    'HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKKKKHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKAAAAAAAA',
+    'HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKKHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKAAAAAAA',
+    'HHHHHHHHHHHHHHHHHHHHHHHKKKHHHHHHHKKHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKKAAAAAY',
+    'HHHHHHHHHHHHHHHHHHHKKKKKKKKKKHHHHHHHHHKKKKKKKKKHHHHHHHHHHHHHHHHHHHHHHHHHKKKAAAAY',
+    'HHHHHHHHHHHHHHHHKKKKKWWWWWWKKKKHHHHHKKKKKKKKKKKKKHHHHHHHHHHHHHHHHHHHHHHHHKKAAAAY',
+    'HHHHHHHHHHHHHHHKKKWWWWWWWWWWWKKKHHHKKKQQQCCCCCKKKKHHHHHHHHHHHHHHHHHHHHHHHHKKAAAA',
+    'HHHHHHHHHHHHHHKKKWWWWWKKKKWWWWKKKHKKKCQCCCCCCCCCKKKHHHHHHHHHHHHHHHHHHHHHHHKKYAAA',
+    'HHHHHHHHHHHHHKKKWWWAKKKKKKKKWWWKKKKCCCCCCKKQCCCCCCKKHHHHHHHHHHHHHHHHHHHHHHHKKAAA',
+    'HHHHHHHHHHHHKKKWWWKKKKHHHHKKKWWWKKKCCCKKKKKKKKCCPCCKKHHHHHHHHKHHHHHHHHHHHHHKKKAA',
+    'HHHHHHHHHHHHKKWWWKKKHHHHHHHHKKKKKKKKKKKKHHHHKKKKPPPKKKHHHHKKKKKKKHHHHHHHHHHHKKAA',
+    'HHHHHHHHHHHKKWWWKKKHHHHHHHHHHKKKKKKKKKHHHHHHHHKKKPPPKKHHKKKKKQQKKKHHHHHHHHHHKKYA',
+    'HHHHHHHHHHKKWWWKKHHHHHHHHHHHHHHHHHHKHHHHHHHHHHHKKKPPPKKKKKPPPPPPKKKKKKKKKHHHHKKA',
+    'HHHHHHHHHHKKWWKKKHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHKKPPPKKKPPPPPPPPKKKKPPPKKKHHHKKA',
+    'HHHHHHHHHKKAWWKKHHHHHHHHHHHHHHHHHHHHKKKKHHHHHHHHHKKPKKKPPPPPPPKKKKPPPPPPKKHHHKKA',
+    'HHHHHHHHHKKWWWKKHHHHHHHHHHHHHHHHHHKKKKKKKKHHHHHHHKKKKKPPPPPPPKKKQPPPPPPPKKHHHHKK',
+    'HHHHHHHHHKKWWKKHHHHHHHHHHHHHHHHHHKKKQPPPPKKKHHHHHHKKKQPPPPPKKKQPPPPPPPPQKKHHHHKK',
+    'HHHHHHHHHKKWWKKHHHHHHHHHKKHHHHHHKKKPPPPPPPKKHHHHHHKKKPPPPPKKKPPPPPPPPPPKKHHHHHKK',
+    'HHHHHHHHKKKKKKKKKKHHHHKKKKKKKHHKKPPPPPPPPPPKKKKKKKKKPPPPPPKKPPPPPPPPPPKKHHHHHHKK',
+    'HHHHHHHHKKKKKKKKKKKKKKKKWWWKKKKKPPPPPPPPPPPKKKKKKKKQPPPPPKKPPPPPPPPPKKKHHHHHHHHK',
+    'HHHHHHKKKKWWWWWWWWKKKKWWWWWWKKKKPPPPPPPPPPPPPPPPPPPPPPPPKKQPPPPPPPKKKKHHHHHHHHHK',
+    'HHHHHKKKWWWWWWWWWWWWKWWAQQQQKKKPPPPPPPPPPPPPPPPPPPPPPPPPPKPPPPPPKKKKHHHHHHHHHHHK',
+    'HHHKKKWWWWWWWWWWWWWWWWAAQQQQKKKPPPPPPPPPPPPKKPPPPPPPPPPPPPPPPPKKKKHHHHHHHHHHHHHK',
+    'HHKKKWWWWWWWWWWWWWWKWWQQAAAQPKKPPPPPPPPPPPPKKPPPPPPPPPPPPPPPPPKKKHHHHHHHHHHHHHHK',
+    'HKKKWWWWWWWWWWWWWWAKWAAAAAAQQKHPPPPPPPPPPPPPKPPPPPPPPPPPPPPPPPPKKKHHHHHHHHHHHHHK',
+    'KKKWWWWWWWWWWWWWWWKKWAAAAAAAKKPPPPPPPPPPPPPPKQPPPPPPPPPPPPPPPPPPPKKHHHHHHHHHHHHK',
+    'KKWWWWWWWWWWWWWWKKKKWAAAAAAAKKPPPPPPPPPPPPPPKKQWWWWPPPPPPPPPPPPPPPKKHHHHHHHHHHKK',
+    'KWWWWWWWWWWWWWWKKKKKWAAAAAAAKKPPPPPPPPPPPPPPKKKWWKWWPPPPPPPPPPPPPPPKKHHHHHHHHHKK',
+    'AWWWWWWWWWWWWWWKYYKYWAAAAAAAKKPPPPPPPPPPPPPPKYWWKKWWPPPPPPPPPPPPPPPKKKHHHHHHHHKK',
+    'WWWWWWWWWWWWWWWKYYKYWAAAAAAAKKPPPPPPPPPPPPPPKYWWKKWWKKHPPPPPPPPPPPPPKKHHHHHHHHKK',
+    'WWWWWWWWWWWWWWWYYYYYWAAAAAAAKKPPPPPPPPPPPPPKKWWWKKWWWKPPPPCPPPPPPPPPKKHHHHHHHHKK',
+    'WWWWWWWWWWWWYKWWYYYYWWAAAAAAKKPPPPPPPPPPPPPKKWWKKYWWWPPPPCCCCCCCPPPPPKKHHHHHHHKK',
+    'WWWWWWWWWWWWYYWWYYYYWWAAAAAAKKPPPPPPPPPPPPPKKWWKKYWWWPPCCCCCCCCCCPPPPKKHHHHHHKKK',
+    'WWWWWWQQQQQWWWWWYYYYWWWAAAAAKKPPPPPPPPPPPPPKKKKKKKWKKPPCCCCCCCCCCCPPPKKHHHHHHKKA',
+    'WWWWWQQQQQQQWWWWWWWYYWWAAAAAKKPPPPPPPPPPPPPKKKKKKKKKKPCCCCCCCCCCCCCPPKKHHHHHHKKA',
+    'WWWWQQQQQQQQAWWWWWWYYWWWWWWWKKPPPPPPPPPPPPKKWWWWAKKKAPCCCCCCCCCCCCCPPPKHHHHHKKAA',
+    'WWWWQQQQQQQQAWWWWWWWWWWWWWWWKKPPPPPPPPPPPPKKWWKKWWWWPPCCCCCCCCCCCCCPPPKHHHHHKKAA',
+    'WWWQQQQQQQQQQWWWWWWWWWWWWWWWAKPPPPPPPPPPPKKQWWWKWWWPPPCCCCCCCCCCCCCPPKKHHHHKKYAA',
+    'WWWQQQQQQQQQAWWWWWWWWWWWWWWWAKQQQPPPPPPPPKKPPPAAWPPPPPCCCCCCCCCCCCCPPKKHHHHKKAAA',
+    'WWWAQQQQQQQQAWWWWWWWWWWWWWWWWKQQPPPPPPPPPPPPPPPPPPPPPPPCCCCCCCCCCCCPPKKHHHKKYAAA',
+    'WWWWQQQQQQQQWWWWWWWWWWWWWWWWAKQQPPPPPPPPPPPPPPPPPPPPPPPPCCCCCCCCCCPPPKKHHHKKAAAA',
+    'WWWWWQQQQQWWWWWWWWWWWWWWWWWWKKQPPPPPPPPPPPPPPPPPPPPPPPPPPCCCCCCCCCPPKKHHHKKAAAAA',
+    'WWWWWWWWWWWWWWWWWWWWWWWWWWWWKKQPPPPPPPPPPPPPPPPPPPPPPPPPPPPPCPCPPPPPKKHHKKKAAAAA',
+    'KWWWWWWWWWWWWWWWWWWWWWWWWWWWKKQPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPKKKHKKKAAAAAA',
+    'KWWWWWWWWWWWWWWWWWWKKKWWWWWWKKQPPPPPPPPPQKKKPPPPPPPPPPPPPPPPPPPPPPKKKHHKKAAAAAAA',
+    'KWWWWWWWWWWWWWWWWWWWKKKAWWWWKKQPPPPPPPPKKKKPPPPPPPPPPPPPPPPPPPPPPKKKHHKKYAAAAAAY',
+    'KWWWWWWWWWWWWWWWWWWWWKKKKKWWKKQPPPPPKKKKKPPPPPPPPPPPPPPPPPPPPPPPKKKHHKKKAAAAAAWY',
+    'KWWWWWWWWWWWWWWWKKWWWWWKKKKKKKKKKKKKKKKPPPPPPPPPPPPPPPPPPPPPPPPPKKHHKKKAAAAAAAYY',
+    'KKWWWWWWWWWWWWWWKKKAWWWWWWKKKKKKKKKKKPPPPPPPPPPPPPPPPPPPPPPPPPPPKKHKKKAAAAAAAAYY',
+    'KKKWWWWWWWWWWWWWWKKKKKWWWWWWKKKPPPPPPPPPPPPKKPPPPPPPPPPPPPPPPPPPKKKKKAAAAAAAAAAY',
+    'AKKKWWWWWWWWWWWWWWWKKKKKKKAAKKKPPPPPPPPPPKKKKPPPPPPPPPPPPPPPPPPPKKKKAAAAAAAAAAAA',
+    'AAKKKWWWWWWWWWWWWWWWWWKKKKKKKKKKKKKKKKKKKKKQPPPPPPPPPPPPPPPPPPPPKKKAAAAAAAAAAAAA',
+    'AAAKKKWWWWWWWWWWWWWWWWWWWWWWKKKKKKKKKKKKWWWWQPPPPPPPPPPPPPPPPPKKKKAAAAUUUUAAAAAA',
+    'AAAAKKKKWWWWWWWWWWWWWWWWWWWWKKQPPPPPPWWWWWWWWPPPPPPPPPPPPPPPPKKKAAAAAUUUUUUAAAAA',
+    'AAAAAAKKKWWWWWWWWWWWWWWWWWWWKKQPPPPPPWWWWWWWWAPPPPPPPPPPPPPPKKKAAAAAUUUUUUUUAAAA',
+    'AAAAAAUKKKAWWWWWWWWWWWWWWWWWKKQPPPPPWWWWWWWWWWPPPPPPPPPPPPKKKKAAAAAAUUUUUUUUAAAA',
+    'AAAAAAUUKKKKWWWWWWWWWWWWWWWWKKPPPPPPWWWWWWWWWWPPPPPPPPPPPKKKQAAAAAAAAUUUUUUUAAAA',
+    'AAAAAAUUUUKKKKWWWWWWWWWWWWWWKKQPPPPQWWWWWWWWWWPPPPPPPPPKKKKQQQAAAAAAAUUUUUUUAAAA',
+    'AAAAAAAUUUUUKKKKWWWWWWWWWWWWKKQPPPPQWWWWWWWWWWPPPPPPPKKKKQQQQQAAAAAAAAUUUUUAAAAA',
+    'AAAAAAAAAAAAAAAAKKWWWWWWWWWWKKQPPPPAWWWWWWWWWPPPPPPKKKKQQQQQQQAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAKKKKKWWWWWWWKKQPPQPQWWWWWWWWWPPPKKKKKAQQQQQQQQAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAAAKKKKKKWWWWKKQPPPPPWWWWWWWWQPKKKKKAAAAQQQQQQQAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAAAAAAKKKKKKKKKPPPPPPAWWWWWKKKKKKKAAAAAAAQQQQAAAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAAAAAAAAKKKKKKKKPPPPPPAKKKKKKKKYYYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAKKKKKKKKKKKKKKKKKYYYYYYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    'AAAAAAAAAAAAAAAAQQQQAAAAAAAAAAAKKKKKKKKAAYYYYYYYYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ',
+    'AAAAAAAAAAAAAAAAQQQQQAAAAAAAAAAAAAAAAAAAAYYYYYYYYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQ',
+    'AAAAAAAAAAAAAAAAQQQQQAAAAAAAAAAAAAAAAAAAAAYYYYYYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQQ',
+    'AAAAAAAAAAAAAAAAQQQQQQAAAAAAAAAAAAAAAAAAAAAYYYYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQQ',
+    'AAAYYYAAAAAAAAAAQQQQQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWWAAAAAAAAAQQQ',
+    'AYYYYYYAAAAAAAAAQQQQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYYYYYYAAAAAAAQQQ',
+  ],
+  lanes: null, // 見下方 LANES_LEVEL_2
 };
 
 // =====================================================================
@@ -733,15 +856,22 @@ function createRenderer(canvas) {
 
   // ---- 暫存格與螞蟻盒 ----
   // 立體按鍵：底下一層暗色當厚度，上面是正面，數字白字描邊
+  // 很淺的顏色（白、淺粉）要加深邊框和數字描邊，不然看不清楚、也會跟空的暫存格混淆
+  const isLight = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.82;
+  };
   function drawKey(x, y, w, h, depth, hex, label) {
     const { lo } = shades(hex), face = h - depth, r = Math.min(12, w * 0.2);
+    const light = isLight(hex), ink = light ? mix(hex, '#000000', 0.55) : lo;
     roundRect(x, y + depth, w, face, r); ctx.fillStyle = lo; ctx.fill();
     roundRect(x, y, w, face, r); ctx.fillStyle = hex; ctx.fill();
+    if (light) { ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.stroke(); }
     roundRect(x + 4, y + 3, w - 8, face * 0.3, r * 0.6); ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill();
     ctx.font = `900 ${Math.round(face * 0.44)}px system-ui, -apple-system, sans-serif`;
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(2.5, face * 0.1);
-    ctx.strokeStyle = lo;
+    ctx.strokeStyle = ink;
     ctx.strokeText(label, x + w / 2, y + face / 2 + 1);
     ctx.fillStyle = '#fff';
     ctx.fillText(label, x + w / 2, y + face / 2 + 1);
@@ -898,32 +1028,129 @@ const LANES_LEVEL_1 = [
 ];
 LEVEL_1.lanes = LANES_LEVEL_1 || boxesToLanes(generateBoxes(LEVEL_1.grid, LEVEL_1_GEN));
 
+// 第 2 關：背景粉的盒子上限提高到 120
+const LEVEL_2_GEN = { seed: 7, maxByColor: { A: 120 } };
+// 由 boxesToLanes(generateBoxes(LEVEL_2.grid, LEVEL_2_GEN)) 產生（含陷阱盒），每個陣列是一行
+const LANES_LEVEL_2 = [
+  [ // 第 1 行（由上往下）
+    { color: 'Q', count: 22 }, { color: 'A', count: 102 }, { color: 'Y', count: 26 }, { color: 'A', count: 107 },
+    { color: 'W', count: 17 }, { color: 'P', count: 47 }, { color: 'A', count: 51 }, { color: 'A', count: 18 },
+    { color: 'Q', count: 11 }, { color: 'H', count: 48 }, { color: 'H', count: 39 }, { color: 'W', count: 33 },
+    { color: 'W', count: 29 }, { color: 'H', count: 45 }, { color: 'P', count: 19 }, { color: 'P', count: 15 },
+    { color: 'W', count: 49 }, { color: 'H', count: 45 }, { color: 'W', count: 47 }, { color: 'K', count: 33 },
+    { color: 'C', count: 48 }, { color: 'W', count: 34 }, { color: 'H', count: 34 }, { color: 'W', count: 23 },
+    { color: 'W', count: 17 }, { color: 'Q', count: 18 }, { color: 'H', count: 17 }, { color: 'K', count: 43 },
+    { color: 'P', count: 34 }, { color: 'P', count: 33 }, { color: 'H', count: 38 }, { color: 'K', count: 28 },
+    { color: 'W', count: 28 }, { color: 'A', count: 13 }, { color: 'P', count: 27 }, { color: 'P', count: 43 },
+    { color: 'K', count: 28 }, { color: 'W', count: 16 }, { color: 'A', count: 16 }, { color: 'P', count: 20 },
+    { color: 'P', count: 15 }, { color: 'K', count: 12 }, { color: 'P', count: 36 }, { color: 'P', count: 29 },
+    { color: 'P', count: 20 }, { color: 'P', count: 13 }, { color: 'W', count: 17 },
+  ],
+  [ // 第 2 行（由上往下）
+    { color: 'Q', count: 17 }, { color: 'A', count: 103 }, { color: 'A', count: 120 }, { color: 'A', count: 97 },
+    { color: 'A', count: 39 }, { color: 'A', count: 98 }, { color: 'K', count: 47 }, { color: 'K', count: 40 },
+    { color: 'Q', count: 19 }, { color: 'A', count: 34 }, { color: 'H', count: 43 }, { color: 'H', count: 29 },
+    { color: 'K', count: 39 }, { color: 'W', count: 39 }, { color: 'K', count: 36 }, { color: 'W', count: 17 },
+    { color: 'W', count: 49 }, { color: 'H', count: 42 }, { color: 'Q', count: 19 }, { color: 'P', count: 22 },
+    { color: 'Q', count: 17 }, { color: 'K', count: 42 }, { color: 'C', count: 23 }, { color: 'W', count: 42 },
+    { color: 'W', count: 36 }, { color: 'W', count: 35 }, { color: 'K', count: 30 }, { color: 'P', count: 34 },
+    { color: 'H', count: 25 }, { color: 'Y', count: 17 }, { color: 'K', count: 42 }, { color: 'H', count: 37 },
+    { color: 'Q', count: 19 }, { color: 'P', count: 24 }, { color: 'K', count: 27 }, { color: 'P', count: 15 },
+    { color: 'H', count: 18 }, { color: 'P', count: 36 }, { color: 'P', count: 34 }, { color: 'P', count: 37 },
+    { color: 'P', count: 35 }, { color: 'W', count: 17 }, { color: 'K', count: 20 }, { color: 'P', count: 19 },
+    { color: 'K', count: 22 }, { color: 'P', count: 26 }, { color: 'H', count: 14 }, { color: 'P', count: 23 },
+    { color: 'Y', count: 12 },
+  ],
+  [ // 第 3 行（由上往下）
+    { color: 'H', count: 23 }, { color: 'A', count: 64 }, { color: 'A', count: 98 }, { color: 'H', count: 20 },
+    { color: 'H', count: 28 }, { color: 'U', count: 12 }, { color: 'A', count: 34 }, { color: 'C', count: 36 },
+    { color: 'A', count: 12 }, { color: 'W', count: 37 }, { color: 'H', count: 37 }, { color: 'H', count: 40 },
+    { color: 'P', count: 26 }, { color: 'P', count: 49 }, { color: 'Q', count: 34 }, { color: 'P', count: 25 },
+    { color: 'P', count: 27 }, { color: 'A', count: 23 }, { color: 'K', count: 11 },
+  ],
+  [ // 第 4 行（由上往下）
+    { color: 'A', count: 103 }, { color: 'K', count: 23 }, { color: 'K', count: 40 }, { color: 'W', count: 18 },
+    { color: 'A', count: 112 }, { color: 'A', count: 39 }, { color: 'Y', count: 14 }, { color: 'Q', count: 42 },
+    { color: 'A', count: 28 }, { color: 'U', count: 11 }, { color: 'H', count: 38 }, { color: 'A', count: 17 },
+    { color: 'W', count: 28 }, { color: 'H', count: 16 }, { color: 'K', count: 24 }, { color: 'H', count: 47 },
+    { color: 'H', count: 38 }, { color: 'K', count: 26 }, { color: 'H', count: 22 }, { color: 'H', count: 43 },
+    { color: 'H', count: 33 }, { color: 'K', count: 16 }, { color: 'C', count: 10 }, { color: 'P', count: 43 },
+    { color: 'W', count: 39 }, { color: 'H', count: 49 }, { color: 'A', count: 19 }, { color: 'P', count: 20 },
+    { color: 'K', count: 32 }, { color: 'P', count: 50 }, { color: 'K', count: 44 }, { color: 'W', count: 25 },
+    { color: 'A', count: 15 }, { color: 'P', count: 49 }, { color: 'P', count: 27 }, { color: 'H', count: 23 },
+    { color: 'H', count: 10 }, { color: 'K', count: 36 }, { color: 'W', count: 16 }, { color: 'P', count: 34 },
+    { color: 'W', count: 14 }, { color: 'P', count: 29 }, { color: 'W', count: 22 }, { color: 'W', count: 11 },
+  ],
+  [ // 第 5 行（由上往下）
+    { color: 'U', count: 50 }, { color: 'K', count: 30 }, { color: 'K', count: 31 }, { color: 'K', count: 50 },
+    { color: 'H', count: 44 }, { color: 'W', count: 31 }, { color: 'Y', count: 19 }, { color: 'W', count: 16 },
+    { color: 'Y', count: 14 }, { color: 'K', count: 49 }, { color: 'W', count: 40 }, { color: 'H', count: 44 },
+    { color: 'Q', count: 26 }, { color: 'H', count: 45 }, { color: 'K', count: 49 }, { color: 'H', count: 49 },
+    { color: 'W', count: 49 }, { color: 'P', count: 28 }, { color: 'C', count: 44 }, { color: 'U', count: 10 },
+    { color: 'K', count: 43 }, { color: 'K', count: 48 }, { color: 'Y', count: 11 }, { color: 'H', count: 29 },
+    { color: 'W', count: 14 }, { color: 'H', count: 18 }, { color: 'P', count: 45 }, { color: 'H', count: 19 },
+    { color: 'H', count: 16 }, { color: 'P', count: 21 }, { color: 'K', count: 26 }, { color: 'W', count: 19 },
+    { color: 'K', count: 28 }, { color: 'A', count: 17 }, { color: 'K', count: 15 }, { color: 'K', count: 14 },
+    { color: 'K', count: 10 }, { color: 'P', count: 10 }, { color: 'A', count: 18 },
+  ],
+];
+LEVEL_2.lanes = LANES_LEVEL_2 || boxesToLanes(generateBoxes(LEVEL_2.grid, LEVEL_2_GEN));
+
+const LEVELS = [LEVEL_1, LEVEL_2];
+
 const canvas = document.getElementById('cv');
 const renderer = createRenderer(canvas);
 let game = null;
+let current = 0; // 目前關卡（LEVELS 的 index）
 let speed = 1;
 let shownStatus = 'playing';
 const $ = (id) => document.getElementById(id);
 
-function start() {
-  const errors = validateLevel(LEVEL_1);
-  if (errors.length) { showOverlay('關卡資料錯誤', errors.join('\n')); console.error(errors); return; }
-  game = createGame(LEVEL_1);
-  shownStatus = 'playing';
+// 過關紀錄只存在這支手機的瀏覽器
+const CLEARED_KEY = 'foodhunt-cleared';
+const loadCleared = () => { try { return new Set(JSON.parse(localStorage.getItem(CLEARED_KEY)) || []); } catch { return new Set(); } };
+const saveCleared = (set) => { try { localStorage.setItem(CLEARED_KEY, JSON.stringify([...set])); } catch {} };
+
+function showScreen(id) {
+  for (const s of ['startScreen', 'levelScreen']) $(s).classList.toggle('hidden', s !== id);
   $('overlay').classList.add('hidden');
-  $('startScreen').classList.add('hidden');
+}
+
+function showStart() { game = null; showScreen('startScreen'); }
+
+function showLevels() {
+  game = null;
+  const cleared = loadCleared();
+  $('levelGrid').innerHTML = '';
+  LEVELS.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.className = 'level-card' + (cleared.has(i) ? ' cleared' : '');
+    b.innerHTML = `<span class="num">${i + 1}</span><span class="state">${cleared.has(i) ? '✓ 已過關' : 'Level ' + (i + 1)}</span>`;
+    b.onclick = () => start(i);
+    $('levelGrid').appendChild(b);
+  });
+  showScreen('levelScreen');
+}
+
+function start(i = current) {
+  current = i;
+  const level = LEVELS[i];
+  const errors = validateLevel(level);
+  if (errors.length) { showOverlay('關卡資料錯誤', errors.join('\n')); console.error(errors); return; }
+  game = createGame(level);
+  shownStatus = 'playing';
+  $('levelTitle').textContent = `Level ${i + 1}`;
+  showScreen(null);
   renderer.resize(game);
 }
 
-function showStart() {
-  game = null;
-  $('overlay').classList.add('hidden');
-  $('startScreen').classList.remove('hidden');
-}
-
-function showOverlay(title, text) {
+// 過關／失敗視窗：右邊按鈕在過關時變成「下一關」
+let ovAction = start;
+function showOverlay(title, text, next) {
   $('ovTitle').textContent = title;
   $('ovText').textContent = text;
+  $('ovBtn').textContent = next ? '下一關' : '再玩一次';
+  ovAction = next ? () => start(current + 1) : () => start(current);
   $('overlay').classList.remove('hidden');
 }
 
@@ -937,7 +1164,10 @@ function frame(now) {
     const st = game.state.status;
     if (st !== shownStatus) {
       shownStatus = st;
-      if (st === 'won') showOverlay('過關！🐜', '');
+      if (st === 'won') {
+        const cleared = loadCleared(); cleared.add(current); saveCleared(cleared);
+        showOverlay('過關！🐜', '', current + 1 < LEVELS.length);
+      }
       if (st === 'lost') showOverlay('失敗', '暫存格滿了，而且沒有隊伍搬得到方塊');
     }
   }
@@ -954,10 +1184,12 @@ $('speedBtn').onclick = () => {
   speed = speed === 1 ? 2 : 1;
   $('speedBtn').classList.toggle('on', speed === 2);
 };
-$('startBtn').onclick = start;
-$('restartBtn').onclick = start;
-$('ovBtn').onclick = start;
-$('ovHome').onclick = showStart;
+$('startBtn').onclick = showLevels;
+$('levelBack').onclick = showStart;
+$('backBtn').onclick = showLevels;
+$('restartBtn').onclick = () => start(current);
+$('ovBtn').onclick = () => ovAction();
+$('ovHome').onclick = showLevels;
 const onResize = () => game && renderer.resize(game);
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', () => setTimeout(onResize, 300)); // iPhone 轉向後尺寸會晚一點才更新

@@ -1,11 +1,12 @@
 # Food Hunt：螞蟻搬方塊
 
-手機直式畫面的網頁益智小遊戲。版面上是一幅 80×80 的像素畫，玩家從下方選螞蟻盒，派螞蟻把同色方塊一格一格搬回洞裡，整幅畫搬完就過關。
+手機直式畫面的網頁益智小遊戲，目前有 2 關：Level 1 松鼠、Level 2 兔子。每關版面上是一幅 80×80 的像素畫，玩家從下方選螞蟻盒，派螞蟻把同色方塊一格一格搬回洞裡，整幅畫搬完就過關。
 
 單一 HTML 檔，用原生 JavaScript 和 Canvas 寫成，不需要後端，也不需要安裝套件。
 
 ## 玩法
 
+- 首頁按 START 進入關卡選擇。關卡選擇只顯示關卡編號和是否已過關，不會顯示題目圖。過關紀錄存在這支手機的瀏覽器裡。
 - 下方有 5 行螞蟻盒，**每行只能點最上面那盒**，點完下面的盒子會往上遞補。
 - 點了的盒子進入暫存格（共 5 格），螞蟻從洞口出發，去搬同色的方塊。
 - 螞蟻只搬得到「碰得到」的方塊：從版面外圍經過空白格可以走到的那些。
@@ -14,7 +15,7 @@
 - **過關**：版面清空，而且螞蟻都回到洞裡。
 - **失敗**：暫存格全滿，而且每一隊都搬不到東西。
 - 有些盒子是陷阱：它的顏色還埋在畫的中間，太早點就會佔住暫存格。
-- 右上角 ▶▶2x 切換倍速，左上角 ↻ 重新開始。
+- 右上角 ▶▶2x 切換倍速。左上角 ◀ 回關卡選擇，↻ 重新開始。過關後可以直接按「下一關」。
 
 ## 執行
 
@@ -30,6 +31,12 @@ python3 -m http.server 8000 --bind 0.0.0.0
 
 **放上網路**：只要上傳 `index.html`、`apple-touch-icon.png`、`icon.png` 三個檔案。**不要上傳 `picture/`**，裡面是題目原圖。
 
+## 新增關卡
+
+1. 把圖片轉成 80×80 的 `grid` 和 `palette`，參考 `LEVEL_2` 的格式。
+2. 加上 `LEVEL_3_GEN`，並設定 `LEVEL_3.lanes = LANES_LEVEL_3 || boxesToLanes(generateBoxes(LEVEL_3.grid, LEVEL_3_GEN))`。
+3. 把 `LEVEL_3` 加進 `LEVELS`，關卡選擇畫面就會自動多一格。
+
 ## 檔案
 
 | 檔案 | 用途 |
@@ -42,11 +49,11 @@ python3 -m http.server 8000 --bind 0.0.0.0
 
 ## 程式結構（`index.html` 的 `<script>`）
 
-1. **關卡資料** `LEVEL_1`：色盤 `palette`，加上像素畫 `grid`（每列一個字串，每個字元是一格的顏色代碼）。
+1. **關卡資料** `LEVEL_1`（松鼠）、`LEVEL_2`（兔子）：色盤 `palette`，加上像素畫 `grid`（每列一個字串，每個字元是一格的顏色代碼）。
 2. **關卡工具**：`parseGrid`、`validateLevel`（檢查盒子總數是否等於各色格數）、`generateBoxes`、`boxesToLanes`。
 3. **規則**（純邏輯，不碰畫面）：`Rules.computeReach` 用 BFS 算可達性；`createGame()` 管狀態、派螞蟻和勝負判定。
 4. **繪製**（只讀取狀態）：`createRenderer()` 負責版面、外框、螞蟻洞、螞蟻、暫存格和螞蟻盒。版面先畫在離屏圖層，只重畫被搬走的格子。
-5. **主程式**：開始畫面、遊戲迴圈（`requestAnimationFrame`）、點擊與按鈕。
+5. **主程式**：`LEVELS` 關卡清單、首頁、關卡選擇、遊戲迴圈（`requestAnimationFrame`）、點擊與按鈕。
 
 ## 關卡資料格式
 
@@ -66,11 +73,12 @@ python3 -m http.server 8000 --bind 0.0.0.0
 ## 重新產生螞蟻盒
 
 ```js
-const LEVEL_1_GEN = { seed: 7, maxByColor: { S: 120, L: 120, G: 120, H: 120 } };
+const LEVEL_1_GEN = { seed: 7, maxByColor: { S: 120, L: 120, G: 120, H: 120 } }; // 天空、草地
+const LEVEL_2_GEN = { seed: 7, maxByColor: { A: 120 } };                        // 背景粉
 ```
 
-1. 修改 `LEVEL_1_GEN`，或改 `generateBoxes` 的參數。
-2. 把 `LANES_LEVEL_1` 設成 `null`，頁面載入時就會用 `boxesToLanes(generateBoxes(...))` 即時產生。
+1. 修改 `LEVEL_N_GEN`，或改 `generateBoxes` 的參數。
+2. 把 `LANES_LEVEL_N` 設成 `null`，頁面載入時就會用 `boxesToLanes(generateBoxes(...))` 即時產生。
 3. 要固定下來的話，把產生出的結果貼回 `LANES_LEVEL_1`。
 
 `generateBoxes(grid, options)` 的參數：
